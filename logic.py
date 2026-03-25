@@ -1,0 +1,496 @@
+import os
+import json
+import schedule
+import time
+import threading
+import hashlib
+import shutil
+import sqlite3
+from datetime import datetime
+import py7zr
+from plyer import notification
+
+CONFIG_FILE = "config.json"
+PROFILES_FILE = "profiles.json"
+BACKUP_HISTORY_FILE = "backup_history.json"
+INCREMENTAL_DB_FILE = "incremental_db.db"
+
+def expand_path(path):
+    if not path: return ""
+    if isinstance(path, list):
+        return [expand_path(p) for p in path]
+    path = path.strip()
+    if path.startswith("~") or path.startswith("/home") or (len(path) > 1 and path[1] == ":"):
+        return os.path.expanduser(path)
+    return path
+
+def normalize_path_separator(path):
+    if not path: return path
+    return path.replace("\\", "/")
+
+# ==================== CONTROLO DE PAUSA E CANCELAMENTO ====================
+backup_pause_event = threading.Event()
+backup_pause_event.set()
+backup_abort_event = threading.Event()
+
+class BackupCancelledException(Exception):
+    pass
+
+def toggle_pause_backup():
+    if backup_pause_event.is_set():
+        backup_pause_event.clear()
+        return True
+    else:
+        backup_pause_event.set()
+        return False
+
+def abort_backup():
+    backup_abort_event.set()
+    backup_pause_event.set() 
+
+# ==================== GESTÃO DE PERFIS ====================
+def save_profiles(profiles):
+    try:
+        with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+            json.dump(profiles, f, indent=4, ensure_ascii=False)
+    except Exception as e: print(f"Erro ao salvar perfis: {e}")
+
+def load_profiles():
+    if os.path.exists(PROFILES_FILE):
+        try:
+            with open(PROFILES_FILE, "r", encoding="utf-8") as pf:
+                data = json.load(pf)
+                for key in data:
+                    if "config" in data[key]:
+                        cfg = data[key]["config"]
+                        if "origin" in cfg: cfg["origin"] = expand_path(cfg["origin"])
+                        if "destination" in cfg: cfg["destination"] = expand_path(cfg["destination"])
+                return data
+        except: pass
+    return {"default": {"name": "Padrão", "config": {}}}
+
+def get_profile_names():
+    return list(load_profiles().keys())
+
+def contract_path(path):
+    if not path: return ""
+    if isinstance(path, list):
+        return [contract_path(p) for p in path]
+    home = os.path.expanduser("~")
+    if path.startswith(home):
+        return path.replace(home, "~", 1)
+    return path
+
+def save_config(data, profile_name="default"):
+    data_to_save = data.copy()
+    if "password" in data_to_save: del data_to_save["password"]
+    
+    if "origin" in data_to_save: data_to_save["origin"] = contract_path(data_to_save["origin"])
+    if "destination" in data_to_save: data_to_save["destination"] = contract_path(data_to_save["destination"])
+    
+    profiles = load_profiles()
+    profiles[profile_name] = {"name": profile_name, "config": data_to_save}
+    save_profiles(profiles)
+    
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data_to_save, f, indent=4, ensure_ascii=False)
+    except: pass
+
+def load_config(profile_name=None):
+    if profile_name:
+        profiles = load_profiles()
+        if profile_name in profiles: return profiles[profile_name].get("config", {})
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f: 
+                config = json.load(f)
+                if "origin" in config: config["origin"] = expand_path(config["origin"])
+                if "destination" in config: config["destination"] = expand_path(config["destination"])
+                return config
+        except: pass
+    return {}
+
+# ==================== HISTÓRICO E DB INCREMENTAL ====================
+def save_backup_history(archive_path, stats):
+    history = load_backup_history()
+    history.append({
+        "timestamp": datetime.now().isoformat(), "archive": os.path.basename(archive_path),
+        "path": archive_path, "size": stats.get("size", 0), "files": stats.get("files", 0),
+        "status": stats.get("status", "unknown"), "duration": stats.get("duration", 0),
+        "type": stats.get("type", "completo")
+    })
+    history = history[-100:]
+    try:
+        with open(BACKUP_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=4, ensure_ascii=False)
+    except: pass
+
+def load_backup_history():
+    if os.path.exists(BACKUP_HISTORY_FILE):
+        try:
+            with open(BACKUP_HISTORY_FILE, "r", encoding="utf-8") as f: return json.load(f)
+        except: pass
+    return []
+
+def init_incremental_db():
+    conn = sqlite3.connect(INCREMENTAL_DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS arquivos (
+            chave TEXT PRIMARY KEY,
+            hash TEXT,
+            mtime REAL,
+            backup_date TEXT
+        )
+    ''')
+    conn.commit()
+    return conn
+
+def get_file_hash(filepath):
+    try:
+        hasher = hashlib.md5()
+        with open(filepath, 'rb') as f:
+            buf = f.read(65536)
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = f.read(65536)
+        return hasher.hexdigest()
+    except: return None
+
+# ==================== FILTROS E CONTAGEM ====================
+def passes_advanced_filters(filepath, filters):
+    if not filters: return True
+    try:
+        stat = os.stat(filepath)
+        file_size = stat.st_size
+        file_mtime = stat.st_mtime
+        
+        if "min_size" in filters and file_size < filters["min_size"]: return False
+        if "max_size" in filters and file_size > filters["max_size"]: return False
+        if "min_date" in filters:
+            if file_mtime < datetime.strptime(filters["min_date"], "%Y-%m-%d").timestamp(): return False
+        if "max_date" in filters:
+            if file_mtime > datetime.strptime(filters["max_date"], "%Y-%m-%d").timestamp(): return False
+        if "file_types" in filters and filters["file_types"]:
+            ext = os.path.splitext(filepath)[1].lower()
+            if ext not in filters["file_types"]: return False
+        return True
+    except: return True
+
+def get_files_to_backup_incremental(origins, exclusions=[], filters={}, folder_exclusions=[]):
+    conn = init_incremental_db()
+    cursor = conn.cursor()
+    files_to_backup = []
+    folder_ignore = [f.strip().lower() for f in folder_exclusions if f.strip()]
+    
+    for origin in origins:
+        try:
+            for root, dirs, files in os.walk(origin):
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() not in folder_ignore]
+                for file in files:
+                    if file.startswith('.'): continue
+                    
+                    src_file = os.path.join(root, file)
+                    rel_path = os.path.relpath(src_file, origin)
+                    
+                    if not passes_advanced_filters(src_file, filters): continue
+                    if any(file.lower().endswith(ext) for ext in exclusions): continue
+                    
+                    current_hash = get_file_hash(src_file)
+                    current_mtime = os.path.getmtime(src_file)
+                    
+                    key = f"{origin}|{rel_path}"
+                    
+                    cursor.execute("SELECT hash FROM arquivos WHERE chave = ?", (key,))
+                    result = cursor.fetchone()
+                    
+                    if not result or result[0] != current_hash:
+                        files_to_backup.append({"path": src_file, "rel_path": rel_path, "origin": origin, "size": os.path.getsize(src_file), "mtime": current_mtime, "hash": current_hash})
+        except: pass
+    conn.close()
+    return files_to_backup
+
+def count_files(origins, exclusions=[], filters={}, folder_exclusions=[]):
+    total = 0
+    folder_ignore = [f.strip().lower() for f in folder_exclusions if f.strip()]
+    for origin in origins:
+        try:
+            for root, dirs, files in os.walk(origin):
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() not in folder_ignore]
+                for file in files:
+                    if file.startswith('.'): continue
+                    
+                    src_file = os.path.join(root, file)
+                    if passes_advanced_filters(src_file, filters):
+                        if not any(file.lower().endswith(ext) for ext in exclusions):
+                            total += 1
+        except: pass
+    return total
+
+# ==================== UTILITÁRIOS ====================
+def get_disk_space(path, timeout=2.0):
+    """ ✅ NOVA SOLUÇÃO 2: Verificação de disco em Thread com Timeout Seguro para não travar o Linux """
+    result = {"total": 0, "used": 0, "free": 0, "percent_used": 0, "success": False}
+    
+    def _check_disk():
+        try:
+            total, used, free = shutil.disk_usage(path)
+            result.update({
+                "total": total, "used": used, "free": free, 
+                "percent_used": (used / total) * 100, "success": True
+            })
+        except:
+            pass
+
+    t = threading.Thread(target=_check_disk, daemon=True)
+    t.start()
+    t.join(timeout) # Espera no máximo 'timeout' segundos
+    return result
+
+def check_disk_space_warning(path, threshold=90):
+    space = get_disk_space(path)
+    if space["success"] and space["percent_used"] > threshold: return True, space
+    return False, space
+
+def check_7z_password(archive_path):
+    try:
+        if not archive_path or not os.path.exists(archive_path): return False
+        with py7zr.SevenZipFile(archive_path, mode='r') as z: return z.password_protected
+    except py7zr.exceptions.PasswordRequired: return True
+    except Exception: return False
+
+def verify_backup_integrity(archive_path, password=None):
+    try:
+        pwd = password if (password and password.strip()) else None
+        with py7zr.SevenZipFile(archive_path, mode='r', password=pwd) as z: z.test()
+        return True, "Integridade verificada com sucesso!"
+    except Exception as e: return False, f"Falha na verificação: {str(e)}"
+
+def cleanup_old_backups(target, max_backups=5, log_callback=None):
+    try:
+        if not os.path.exists(target) or max_backups <= 0: return 0
+        backups = sorted([f for f in os.listdir(target) if f.startswith("Backup_") and f.endswith(".7z")])
+        removed_count = 0
+        while len(backups) > max_backups:
+            old_backup = backups.pop(0)
+            os.remove(os.path.join(target, old_backup))
+            removed_count += 1
+            if log_callback: log_callback(f"Backup antigo removido: {old_backup}")
+        return removed_count
+    except Exception as e:
+        if log_callback: log_callback(f"Erro na limpeza: {str(e)}")
+        return 0
+
+def compare_backups(archive1, archive2, password1=None, password2=None):
+    try:
+        pwd1 = password1 if (password1 and password1.strip()) else None
+        pwd2 = password2 if (password2 and password2.strip()) else None
+        with py7zr.SevenZipFile(archive1, mode='r', password=pwd1) as z1: files1 = set(z1.getnames())
+        with py7zr.SevenZipFile(archive2, mode='r', password=pwd2) as z2: files2 = set(z2.getnames())
+        
+        only_in_1 = files1 - files2
+        only_in_2 = files2 - files1
+        common = files1 & files2
+        return {"total_1": len(files1), "total_2": len(files2), "only_in_first": list(only_in_1), "only_in_second": list(only_in_2), "common": len(common), "different": len(only_in_1) + len(only_in_2)}
+    except Exception as e: return {"error": str(e)}
+
+# ==================== BACKUP PRINCIPAL ====================
+def start_backup_process(origins, target, compression_level="Normal", password=None, 
+                         exclusions="", retention=5, progress_callback=None, 
+                         ui_log_callback=None, incremental=False, filters={}, folder_exclusions=[]):
+    start_time = time.time()
+    
+    backup_pause_event.set() 
+    backup_abort_event.clear() 
+    
+    if not origins: return "Erro: Nenhuma pasta selecionada.", False, {}
+    try: os.makedirs(target, exist_ok=True)
+    except Exception as e: return f"Erro no destino: {e}", False, {}
+    
+    space_warning, space_info = check_disk_space_warning(target, 90)
+    if space_warning and ui_log_callback: ui_log_callback(f"⚠️ ALERTA: Espaço em disco crítico ({space_info['percent_used']:.1f}% usado)")
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_type = "incremental" if incremental else "completo"
+    archive_name = f"Backup_{backup_type}_{timestamp}.7z"
+    full_dest_path = os.path.join(target, archive_name)
+
+    exclude_list = [ext.strip().lower() for ext in exclusions.split(',') if ext.strip()] if exclusions else []
+    folder_ignore = [f.strip().lower() for f in folder_exclusions if f.strip()]
+    presets = {"Armazenar": 0, "Rápido": 1, "Normal": 3, "Máximo": 9}
+    
+    if incremental:
+        files_to_backup = get_files_to_backup_incremental(origins, exclude_list, filters, folder_ignore)
+        total_files = len(files_to_backup)
+    else:
+        total_files = count_files(origins, exclude_list, filters, folder_ignore)
+        files_to_backup = None
+    
+    files_processed = 0
+    start_process_time = time.time()
+
+    try:
+        filters_compression = [{'id': py7zr.FILTER_LZMA2, 'preset': presets.get(compression_level, 3)}]
+        pwd = password if (password and password.strip()) else None
+
+        with py7zr.SevenZipFile(full_dest_path, 'w', filters=filters_compression, password=pwd) as archive:
+            if pwd: archive.header_encryption = True
+            
+            if incremental and files_to_backup:
+                for file_info in files_to_backup:
+                    backup_pause_event.wait() 
+                    if backup_abort_event.is_set(): raise BackupCancelledException("Backup abortado pelo utilizador.")
+                    
+                    if os.path.abspath(file_info["path"]) == os.path.abspath(full_dest_path): continue
+                    if os.path.islink(file_info["path"]) or not os.path.isfile(file_info["path"]): continue
+
+                    try:
+                        archive.write(file_info["path"], file_info["rel_path"])
+                        files_processed += 1
+                    except Exception as fe:
+                        if ui_log_callback: ui_log_callback(f"⚠️ Ignorado [{file_info['rel_path']}]: {str(fe)}")
+                        continue
+                    
+                    elapsed = time.time() - start_process_time
+                    remaining = (elapsed / files_processed) * (total_files - files_processed) if files_processed > 0 else 0
+                    if progress_callback: progress_callback(files_processed / total_files if total_files > 0 else 1, remaining)
+                    time.sleep(0.005)
+            else:
+                for origin in origins:
+                    folder_name = os.path.basename(origin)
+                    for root, dirs, files in os.walk(origin):
+                        backup_pause_event.wait() 
+                        if backup_abort_event.is_set(): raise BackupCancelledException("Backup abortado pelo utilizador.")
+                        
+                        dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() not in folder_ignore]
+                        
+                        for file in files:
+                            backup_pause_event.wait()
+                            if backup_abort_event.is_set(): raise BackupCancelledException("Backup abortado pelo utilizador.")
+                            
+                            if file.startswith('.'): continue
+                            if any(file.lower().endswith(ext) for ext in exclude_list): continue
+                            src_file = os.path.join(root, file)
+                            
+                            if not passes_advanced_filters(src_file, filters): continue
+                            if os.path.abspath(src_file) == os.path.abspath(full_dest_path): continue
+                            if os.path.islink(src_file) or not os.path.isfile(src_file): continue
+
+                            try:
+                                archive.write(src_file, os.path.join(folder_name, os.path.relpath(src_file, origin)))
+                                files_processed += 1
+                            except Exception as fe:
+                                if ui_log_callback: ui_log_callback(f"⚠️ Ignorado [{file}]: {str(fe)}")
+                                continue
+                            
+                            elapsed = time.time() - start_process_time
+                            remaining = (elapsed / files_processed) * (total_files - files_processed) if files_processed > 0 else 0
+                            if progress_callback: progress_callback(files_processed / total_files if total_files > 0 else 1, remaining)
+                            time.sleep(0.005)
+                            
+        if ui_log_callback: ui_log_callback("A verificar integridade do backup...")
+        integrity_ok, integrity_msg = verify_backup_integrity(full_dest_path, pwd)
+        
+        if not integrity_ok:
+            if os.path.exists(full_dest_path): os.remove(full_dest_path)
+            return f"Erro: {integrity_msg}", False, {}
+        
+        if retention > 0:
+            removed = cleanup_old_backups(target, retention, ui_log_callback)
+            if removed > 0 and ui_log_callback: ui_log_callback(f"{removed} backup(s) antigo(s) removido(s).")
+        
+        stats = {"size": os.path.getsize(full_dest_path), "files": files_processed, "status": "success", "duration": time.time() - start_time, "type": backup_type}
+        save_backup_history(full_dest_path, stats)
+        
+        if incremental and files_to_backup:
+            conn = init_incremental_db()
+            cursor = conn.cursor()
+            for file_info in files_to_backup:
+                key = f"{file_info['origin']}|{file_info['rel_path']}"
+                cursor.execute('''
+                    INSERT OR REPLACE INTO arquivos (chave, hash, mtime, backup_date)
+                    VALUES (?, ?, ?, ?)
+                ''', (key, file_info["hash"], file_info["mtime"], timestamp))
+            conn.commit()
+            conn.close()
+        
+        try: notification.notify(title="Backup Fácil Pro", message=f"Backup concluído:\n{archive_name}", timeout=5)
+        except Exception: pass
+        
+        return f"Sucesso: {archive_name} criado.", True, stats
+
+    except BackupCancelledException as e:
+        if os.path.exists(full_dest_path): 
+            try: os.remove(full_dest_path)
+            except: pass
+        if ui_log_callback: ui_log_callback("❌ Backup cancelado. Ficheiros temporários removidos.")
+        return str(e), False, {}
+        
+    except Exception as e:
+        if os.path.exists(full_dest_path): os.remove(full_dest_path)
+        return f"Erro Crítico: {str(e)}", False, {}
+
+# ==================== RESTAURAÇÃO E AGENDADOR ====================
+def restore_backup_process(archive_path, extract_to, password=None, log_callback=None):
+    try:
+        pwd = password if (password and password.strip()) else None
+        if log_callback: log_callback("A iniciar extração do backup...")
+        with py7zr.SevenZipFile(archive_path, mode='r', password=pwd) as z:
+            z.getnames(); z.extractall(path=extract_to)
+        if log_callback: log_callback("Extração concluída com sucesso!")
+        return "Sucesso: Restauração concluída!", True
+    except py7zr.exceptions.PasswordRequired: return "Erro: Senha incorreta ou não fornecida!", False
+    except py7zr.exceptions.CrcError: return "Erro: Falha de CRC (Ficheiro corrompido ou senha incorreta).", False
+    except Exception as e: return f"Erro: {str(e)}", False
+
+scheduler_running = False
+scheduler_thread = None
+
+def start_scheduler(config):
+    global scheduler_running, scheduler_thread
+    schedule.clear()
+    
+    def job():
+        start_backup_process(
+            origins=config.get("origin", []), target=config.get("destination", ""),
+            compression_level=config.get("compression", "Normal"), password=config.get("password"),
+            retention=config.get("retention", 5), incremental=config.get("incremental", False),
+            filters=config.get("filters", {}), folder_exclusions=config.get("folder_exclusions", [])
+        )
+
+    freq = config.get("frequency", "Diário")
+    horario = config.get("time", "03:00").strip()
+    if len(horario) == 4 and horario[1] == ':': horario = "0" + horario
+    
+    try:
+        if freq == "Diário": schedule.every().day.at(horario).do(job)
+        elif freq == "Semanal": schedule.every().monday.at(horario).do(job)
+    except Exception as e: print(f"Erro ao configurar horário: {e}")
+
+    if not scheduler_running:
+        scheduler_running = True
+        def loop():
+            while scheduler_running:
+                schedule.run_pending()
+                time.sleep(1)
+        scheduler_thread = threading.Thread(target=loop, daemon=True)
+        scheduler_thread.start()
+
+def stop_scheduler():
+    global scheduler_running
+    scheduler_running = False
+    schedule.clear()
+
+def get_dashboard_data():
+    history = load_backup_history()
+    total_backups = len(history)
+    successful = len([h for h in history if h.get("status") == "success"])
+    return {
+        "total_backups": total_backups, "successful": successful, "failed": total_backups - successful,
+        "success_rate": (successful / total_backups * 100) if total_backups > 0 else 0,
+        "last_backup": history[-1] if history else None,
+        "total_size": sum(h.get("size", 0) for h in history),
+        "total_files": sum(h.get("files", 0) for h in history),
+        "recent_backups": history[-10:] if history else []
+    }

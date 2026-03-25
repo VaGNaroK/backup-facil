@@ -1,0 +1,23 @@
+# Ambientes Virtuais do Python
+venv/
+env/
+
+# Pastas de Compilação (PyInstaller e DEB)
+build/
+dist/
+*.deb
+*.spec
+backup-facil-pro_*/
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Banco de Dados e Histórico Local do Utilizador
+incremental_db.db
+backup_history.json
+profiles.json
+config.json
+
+# Ficheiros de Sistema
+.DS_Store
