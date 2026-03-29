@@ -1,54 +1,48 @@
-Agora que o lado do Linux está 100% resolvido, testado e empacotado, vamos atravessar a ponte para o lado da Microsoft e gerar o seu .exe.
-
-Como o Python e o PyInstaller precisam do "motor" nativo do sistema operativo para compilar, você não pode gerar o .exe de dentro do Linux Mint. Terá de fazer este processo dentro do ambiente Windows.
-
-Aqui está o plano de ação rápido e direto para você brilhar no Windows:
+Como gerar o seu .exe.
 
 Passo 1: Levar o código para o Windows
-Vá para o seu ambiente Windows e abra o terminal (CMD ou PowerShell). Como você já tem tudo no GitHub, basta "clonar" o projeto limpinho para o Windows:
+Vá para o seu ambiente Windows e abra o terminal (CMD ou PowerShell). Como o projeto já está no seu GitHub com a nova estrutura, basta clonar:
 
 git clone https://github.com/VaGNaroK/backup-facil.git
 cd backup-facil
 
 Passo 2: Preparar a "Bolha" no Windows
-Dentro da pasta do projeto no Windows, crie o ambiente virtual e instale as bibliotecas. Rode um por um:
+Dentro da pasta do projeto no Windows, crie o ambiente virtual e instale as bibliotecas. Como agora temos um arquivo oficial de dependências, você não precisa mais digitar o nome de cada biblioteca:
 
 python -m venv venv
 venv\Scripts\activate
-pip install customtkinter py7zr schedule plyer pystray pillow pyinstaller
+pip install -r requirements.txt
 
 Passo 3: O Script Mágico do Windows (gerar_exe.bat)
-Assim como fizemos o gerar_deb.sh para o Linux, vamos criar um arquivo equivalente para o Windows.
-Crie um arquivo chamado gerar_exe.bat na pasta do projeto e cole este código:
+Crie (ou renomeie o seu txt) para um arquivo chamado gerar_exe.bat dentro da pasta scripts\ e cole este código. Ele já está configurado com os caminhos corretos (src\main.py, assets\icon.ico) e com o separador do Windows (;):
 
 @echo off
 echo ==========================================
-echo   Gerando o Executavel do Backup Facil
+echo   Gerando o Executavel do Backup Facil Pro
 echo ==========================================
 
-echo [1] Limpando arquivos antigos...
+echo [1] Limpando arquivos e caches antigos...
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
-if exist "BackupFacilPro.spec" del /q "BackupFacilPro.spec"
+del /q *.spec 2>nul
 
-echo [2] Iniciando o PyInstaller...
-pyinstaller --noconsole --onefile --icon=icon.ico --collect-all customtkinter --collect-all plyer --name "BackupFacilPro" main.py
+echo [2] Iniciando o PyInstaller (PySide6)...
+python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets\icon.ico" --add-data "assets;assets" src\main.py
 
-echo [3] Limpeza final...
+echo [3] Limpeza final profunda...
 if exist "build" rmdir /s /q "build"
-if exist "BackupFacilPro.spec" del /q "BackupFacilPro.spec"
+del /q *.spec 2>nul
+for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
 
 echo.
 echo ==========================================
-echo SUCESSO! O arquivo BackupFacilPro.exe esta na pasta 'dist'!
+echo SUCESSO! O arquivo Backup_Facil_Pro.exe esta na pasta 'dist'!
 echo ==========================================
 pause
 
 Passo 4: Compilar!
-Ainda com o seu (venv) ativado no terminal do Windows, basta rodar o script:
+Ainda com o seu (venv) ativado no terminal do Windows, certifique-se de estar na raiz do projeto e rode o script chamando a pasta scripts:
 
-gerar_exe.bat
+scripts\gerar_exe.bat
 
-Sente-se e deixe o Windows trabalhar. Quando ele terminar, você terá uma pasta chamada dist e lá dentro estará o seu BackupFacilPro.exe brilhando, já com o ícone verde do escudo incorporado!
-
-Dê dois cliques nele, veja a interface abrir (e o ícone ir para a bandeja do relógio do Windows) e me conte o resultado!
+agora deixe o Windows compilar toda a interface do PySide6 e a criptografia AES-256. Quando terminar, você terá uma pasta chamada dist\ e lá dentro estará o seu Backup_Facil_Pro.exe.
