@@ -38,7 +38,8 @@ BACKUP_FACIL/
 │   └── ui_components.py    # Componentes visuais do PySide6
 ├── assets/                 # Imagens, ícones e arquivos visuais
 ├── scripts/                # Scripts de compilação e empacotamento
-│   └── gerar_deb.sh        # Script gerador do instalador Linux Mint/Debian
+│   ├── gerar_deb.sh        # Script gerador do instalador Linux Mint/Debian
+│   └── gerar_exe.bat       # Script gerador do executável Windows
 ├── data/                   # (Gerado em dev) Configurações e DB local
 ├── requirements.txt        # Dependências do projeto
 └── README.md               # Documentação
@@ -56,7 +57,7 @@ BACKUP_FACIL/
    ```bash
    python3 -m venv venv
    source venv/bin/activate  # No Linux/Mac
-   # ou venv\Scripts\activate no Windows
+   # ou venv\Scripts\activate # No Windows
    ```
 
 3. Instale as dependências:
@@ -71,36 +72,38 @@ BACKUP_FACIL/
 
 ## 📦 Como Compilar e Instalar (Linux Mint / Debian)
 
-O projeto inclui um script de automação (CI/CD local) que compila o código usando PyInstaller e gera um instalador `.deb` configurado com ícones e atalhos de sistema.
+Siga rigorosamente a ordem abaixo para gerar o instalador corretamente:
 
-1. Conceda permissão de execução ao script:
+1. **Compilar o Binário:** Gere o executável a partir do código fonte.
+   ```bash
+   python3 -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets/icon.png" --add-data "assets:assets" src/main.py
+   ```
+
+2. **Preparar o Script:** Conceda permissão de execução ao script de empacotamento.
    ```bash
    chmod +x scripts/gerar_deb.sh
    ```
 
-2. Execute o pipeline de compilação:
+3. **Gerar o Pacote .deb:** Execute o script para criar o instalador Debian.
    ```bash
-   python3 -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets/icon.png" --add-data "assets:assets" src/main.py
    ./scripts/gerar_deb.sh
    ```
 
-3. Instale o pacote gerado:
+4. **Instalar:** Utilize o gerenciador de pacotes para instalar o sistema.
    ```bash
    sudo dpkg -i backup-facil-pro_0.3.4_amd64.deb
    ```
 
 ## 🪟 Como Compilar (Windows)
 
-Para gerar o arquivo executável `.exe` no Windows, abra o Terminal (CMD ou PowerShell) na raiz do projeto, ative o ambiente virtual e execute o PyInstaller. 
+Para gerar o arquivo executável `.exe` no Windows, abra o Terminal (CMD ou PowerShell) na raiz do projeto, ative o ambiente virtual e execute:
 
-*Atenção: No Windows, usamos o separador `;` no comando `--add-data` e o arquivo de ícone `.ico`.*
-
-1. Execute o comando de compilação:
+1. **Comando de Compilação:**
    ```cmd
    python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets\icon.ico" --add-data "assets;assets" src\main.py
    ```
 
-2. O executável pronto estará disponível na pasta `dist\`. Você pode movê-lo para qualquer lugar e executá-lo de forma independente.
+2. O executável pronto estará disponível na pasta `dist\`.
 
 ---
-*Desenvolvido com ☕ por VaGNaroK.*
+*Desenvolvido por VaGNaroK com um help de IA.*
