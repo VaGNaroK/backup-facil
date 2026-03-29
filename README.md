@@ -42,3 +42,61 @@ BACKUP_FACIL/
 ├── data/                   # (Gerado em dev) Configurações e DB local
 ├── requirements.txt        # Dependências do projeto
 └── README.md               # Documentação
+```
+
+## 🚀 Como Executar em Modo de Desenvolvimento
+
+1. Clone o repositório e acesse a pasta do projeto.
+
+2. Crie e ative um ambiente virtual:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # No Linux/Mac
+   # ou venv\Scripts\activate no Windows
+   ```
+
+3. Instale as dependências:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Execute a aplicação:
+   ```bash
+   python3 src/main.py
+   ```
+
+## 📦 Como Compilar e Instalar (Linux Mint / Debian)
+
+O projeto inclui um script de automação (CI/CD local) que compila o código usando PyInstaller e gera um instalador `.deb` configurado com ícones e atalhos de sistema.
+
+1. Conceda permissão de execução ao script:
+   ```bash
+   chmod +x scripts/gerar_deb.sh
+   ```
+
+2. Execute o pipeline de compilação:
+   ```bash
+   python3 -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets/icon.png" --add-data "assets:assets" src/main.py
+   ./scripts/gerar_deb.sh
+   ```
+
+3. Instale o pacote gerado:
+   ```bash
+   sudo dpkg -i backup-facil-pro_0.3.4_amd64.deb
+   ```
+
+## 🪟 Como Compilar (Windows)
+
+Para gerar o arquivo executável `.exe` no Windows, abra o Terminal (CMD ou PowerShell) na raiz do projeto, ative o ambiente virtual e execute o PyInstaller. 
+
+*Atenção: No Windows, usamos o separador `;` no comando `--add-data` e o arquivo de ícone `.ico`.*
+
+1. Execute o comando de compilação:
+   ```cmd
+   python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets\icon.ico" --add-data "assets;assets" src\main.py
+   ```
+
+2. O executável pronto estará disponível na pasta `dist\`. Você pode movê-lo para qualquer lugar e executá-lo de forma independente.
+
+---
+*Desenvolvido com ☕ por VaGNaroK.*
