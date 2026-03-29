@@ -1,23 +1,40 @@
-# Ambientes Virtuais do Python
+# ==========================================
+# 🛑 IGNORAR ARQUIVOS DO PYTHON
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ==========================================
+# 🛑 IGNORAR AMBIENTE VIRTUAL
+# ==========================================
 venv/
 env/
+.env
 
-# Pastas de Compilação (PyInstaller e DEB)
+# ==========================================
+# 🛑 IGNORAR DADOS LOCAIS E SEGURANÇA
+# ==========================================
+# Não subir configurações, senhas e histórico pessoal
+data/
+*.db
+*.sqlite3
+*.log
+
+# ==========================================
+# 🛑 IGNORAR COMPILADORES E INSTALADORES
+# ==========================================
+# Ignora o lixo do PyInstaller e os pacotes pesados gerados
 build/
 dist/
-*.deb
 *.spec
-backup-facil-pro_*/
+*.deb
+*.exe
+*.AppImage
 
-# Cache do Python
-__pycache__/
-*.pyc
-
-# Banco de Dados e Histórico Local do Utilizador
-incremental_db.db
-backup_history.json
-profiles.json
-config.json
-
-# Ficheiros de Sistema
+# ==========================================
+# 🛑 IGNORAR CACHES DE EDITORES (VS Code, etc)
+# ==========================================
+.vscode/
+.idea/
 .DS_Store
