@@ -1,0 +1,54 @@
+Agora que o lado do Linux está 100% resolvido, testado e empacotado, vamos atravessar a ponte para o lado da Microsoft e gerar o seu .exe.
+
+Como o Python e o PyInstaller precisam do "motor" nativo do sistema operativo para compilar, você não pode gerar o .exe de dentro do Linux Mint. Terá de fazer este processo dentro do ambiente Windows.
+
+Aqui está o plano de ação rápido e direto para você brilhar no Windows:
+
+Passo 1: Levar o código para o Windows
+Vá para o seu ambiente Windows e abra o terminal (CMD ou PowerShell). Como você já tem tudo no GitHub, basta "clonar" o projeto limpinho para o Windows:
+
+git clone https://github.com/VaGNaroK/backup-facil.git
+cd backup-facil
+
+Passo 2: Preparar a "Bolha" no Windows
+Dentro da pasta do projeto no Windows, crie o ambiente virtual e instale as bibliotecas. Rode um por um:
+
+python -m venv venv
+venv\Scripts\activate
+pip install customtkinter py7zr schedule plyer pystray pillow pyinstaller
+
+Passo 3: O Script Mágico do Windows (gerar_exe.bat)
+Assim como fizemos o gerar_deb.sh para o Linux, vamos criar um arquivo equivalente para o Windows.
+Crie um arquivo chamado gerar_exe.bat na pasta do projeto e cole este código:
+
+@echo off
+echo ==========================================
+echo   Gerando o Executavel do Backup Facil
+echo ==========================================
+
+echo [1] Limpando arquivos antigos...
+if exist "build" rmdir /s /q "build"
+if exist "dist" rmdir /s /q "dist"
+if exist "BackupFacilPro.spec" del /q "BackupFacilPro.spec"
+
+echo [2] Iniciando o PyInstaller...
+pyinstaller --noconsole --onefile --icon=icon.ico --collect-all customtkinter --collect-all plyer --name "BackupFacilPro" main.py
+
+echo [3] Limpeza final...
+if exist "build" rmdir /s /q "build"
+if exist "BackupFacilPro.spec" del /q "BackupFacilPro.spec"
+
+echo.
+echo ==========================================
+echo SUCESSO! O arquivo BackupFacilPro.exe esta na pasta 'dist'!
+echo ==========================================
+pause
+
+Passo 4: Compilar!
+Ainda com o seu (venv) ativado no terminal do Windows, basta rodar o script:
+
+gerar_exe.bat
+
+Sente-se e deixe o Windows trabalhar. Quando ele terminar, você terá uma pasta chamada dist e lá dentro estará o seu BackupFacilPro.exe brilhando, já com o ícone verde do escudo incorporado!
+
+Dê dois cliques nele, veja a interface abrir (e o ícone ir para a bandeja do relógio do Windows) e me conte o resultado!
