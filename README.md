@@ -46,7 +46,11 @@ BACKUP_FACIL/
 
 ## 🚀 Como Executar em Modo de Desenvolvimento
 
-1. Clone o repositório e acesse a pasta do projeto.
+1. Clone o repositório e acesse a pasta do projeto:
+   ```bash
+   git clone https://github.com/VaGNaroK/backup-facil.git
+   cd backup-facil
+   ```
 
 2. Crie e ative um ambiente virtual:
    ```bash
