@@ -1,6 +1,10 @@
 📝 Changelog - Backup Fácil Professional
 Este arquivo registra todas as mudanças notáveis feitas no projeto Backup Fácil Professional desde o seu início.
 
+[0.3.7] - 2026-04-03
+Atualiza para v0.3.7, aprimora tratamento de erros de senha e padroniza nome do diretório, correção de bugs.
+
+
 [0.3.5] - 2026-03-31
 🚀 Adicionado
 Automação de limpeza no script gerar_deb.sh para remover arquivos .deb antigos e evitar confusão de versões.
