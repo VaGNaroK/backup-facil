@@ -4,10 +4,14 @@
 # CONFIGURAÇÕES DO PACOTE
 # ==========================================
 APP_NAME="backup-facil-pro"
-APP_VERSION="0.3.4"
+# ✅ Lê a versão dinamicamente do arquivo logic.py (Fonte Única de Verdade)
+APP_VERSION=$(grep 'APP_VERSION =' src/logic.py | cut -d '"' -f 2)
 ARCHITECTURE="amd64"
 MAINTAINER="VaGNaroK <vagnarok@email.com>"
 DESCRIPTION="Ferramenta profissional para backups locais, incrementais e criptografados."
+
+# Apaga pacotes .deb antigos para não confundir a versão
+rm -f *.deb
 
 # Nome da pasta de construção do pacote
 BUILD_DIR="${APP_NAME}_${APP_VERSION}_${ARCHITECTURE}"
@@ -90,13 +94,13 @@ dpkg-deb --build "${BUILD_DIR}"
 # ==========================================
 echo "🧹 Limpando caches de compilação e arquivos residuais..."
 # Remove a pasta temporária de construção do Debian
-rm -r "${BUILD_DIR}"
+rm -rf "${BUILD_DIR}"
 # Remove as pastas geradas pelo PyInstaller
 rm -rf "build/"
 rm -rf "dist/"
-# Remove o arquivo .spec gerado pelo PyInstaller
-rm -f *.spec
-# Procura e remove recursivamente todas as pastas __pycache__ do Python
-find . -type d -name "__pycache__" -exec rm -r {} +
+# Remove qualquer arquivo .spec em qualquer lugar do projeto de forma absoluta
+find . -type f -name "*.spec" -delete
+# Procura e remove recursivamente todas as pastas __pycache__ do Python de forma silenciosa
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 
 echo "✅ SUCESSO! O pacote ${BUILD_DIR}.deb foi criado na raiz do seu projeto e o ambiente foi limpo."

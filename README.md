@@ -76,7 +76,7 @@ Siga rigorosamente a ordem abaixo para gerar o instalador corretamente:
 
 1. **Compilar o Binário:** Gere o executável a partir do código fonte.
    ```bash
-   python3 -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets/icon.png" --add-data "assets:assets" src/main.py
+   python3 -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets/icon.png" --add-data "assets:assets" --hidden-import logic --hidden-import ui_components src/main.py
    ```
 
 2. **Preparar o Script:** Conceda permissão de execução ao script de empacotamento.
@@ -100,7 +100,7 @@ Para gerar o arquivo executável `.exe` no Windows, abra o Terminal (CMD ou Powe
 
 1. **Comando de Compilação:**
    ```cmd
-   python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets\icon.ico" --add-data "assets;assets" src\main.py
+   python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets\icon.ico" --add-data "assets;assets" --hidden-import logic --hidden-import ui_components src\main.py
    ```
 
 2. O executável pronto estará disponível na pasta `dist\`.

@@ -1,5 +1,6 @@
 import os
 import traceback
+from datetime import datetime
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
                                QLabel, QLineEdit, QPushButton, 
                                QListWidget, QProgressBar, QFileDialog, QFrame, QMessageBox,
@@ -14,8 +15,11 @@ import logic
 class TrabalhadorBackup(QThread):
     sucesso = Signal(tuple)
     erro = Signal(str)
+    progresso = Signal(int)
+    log_emitido = Signal(str)
 
-    def __init__(self, origens, destino, compressao, senha, incremental, exclusoes):
+    def __init__(self, origens, destino, compressao, senha, incremental, exclusoes,
+                 retention=5, volume_size="0", folder_exclusions=None):
         super().__init__()
         self.origens = origens
         self.destino = destino
@@ -23,6 +27,9 @@ class TrabalhadorBackup(QThread):
         self.senha = senha
         self.incremental = incremental
         self.exclusoes = exclusoes
+        self.retention = retention
+        self.volume_size = volume_size
+        self.folder_exclusions = folder_exclusions if folder_exclusions else []
 
     def run(self):
         try:
@@ -32,7 +39,12 @@ class TrabalhadorBackup(QThread):
                 compression_level=self.compressao,
                 password=self.senha,
                 incremental=self.incremental,
-                exclusions=self.exclusoes
+                exclusions=self.exclusoes,
+                retention=self.retention,
+                volume_size=self.volume_size,
+                folder_exclusions=self.folder_exclusions,
+                progress_callback=self.progresso.emit,
+                ui_log_callback=self.log_emitido.emit
             )
             self.sucesso.emit(resultado)
         except Exception as e:
@@ -92,6 +104,7 @@ class AbaBackup(QWidget):
         super().__init__()
         self.worker = None
         self.setup_ui()
+        self.carregar_config_salvo()
 
     def setup_ui(self):
         layout_principal = QVBoxLayout(self)
@@ -136,6 +149,7 @@ class AbaBackup(QWidget):
         layout_opcoes.setSpacing(15)
 
         layout_col1 = QVBoxLayout()
+        layout_col1.setSpacing(5) # Reduzido
         lbl_compressao = QLabel("Nível de Compressão:")
         self.combo_compressao = QComboBox()
         self.combo_compressao.addItems(["Armazenar", "Rápido", "Normal", "Máximo"])
@@ -150,22 +164,45 @@ class AbaBackup(QWidget):
         layout_col1.addWidget(self.chk_incremental)
 
         layout_col2 = QVBoxLayout()
+        layout_col2.setSpacing(5)
         lbl_senha = QLabel("Senha (Opcional):")
         self.campo_senha = QLineEdit()
-        self.campo_senha.setPlaceholderText("Deixe em branco para não usar senha")
+        self.campo_senha.setPlaceholderText("Senha (opcional)")
         self.campo_senha.setEchoMode(QLineEdit.Password)
         
         lbl_regex = QLabel("Ignorar (Extensões ou Regex):")
         self.campo_regex = QLineEdit()
-        self.campo_regex.setPlaceholderText("Ex: .tmp, .log, ^temp_.*")
+        self.campo_regex.setPlaceholderText("Ex: .tmp, .log")
+        
+        lbl_volume = QLabel("Tamanho do Volume (0 para não dividir):")
+        self.campo_volume = QLineEdit("0")
+        self.campo_volume.setPlaceholderText("Ex: 1000m, 2g")
 
         layout_col2.addWidget(lbl_senha)
         layout_col2.addWidget(self.campo_senha)
         layout_col2.addWidget(lbl_regex)
         layout_col2.addWidget(self.campo_regex)
+        layout_col2.addWidget(lbl_volume)
+        layout_col2.addWidget(self.campo_volume)
+
+        layout_col3 = QVBoxLayout()
+        layout_col3.setSpacing(5)
+        lbl_retention = QLabel("Retenção (0 = ilimitado):")
+        self.campo_retention = QLineEdit("5")
+        self.campo_retention.setPlaceholderText("Ex: 5")
+
+        lbl_folder_exc = QLabel("Ignorar Pastas (nomes):")
+        self.campo_folder_exc = QLineEdit()
+        self.campo_folder_exc.setPlaceholderText("Ex: node_modules, .git")
+
+        layout_col3.addWidget(lbl_retention)
+        layout_col3.addWidget(self.campo_retention)
+        layout_col3.addWidget(lbl_folder_exc)
+        layout_col3.addWidget(self.campo_folder_exc)
 
         layout_opcoes.addLayout(layout_col1)
         layout_opcoes.addLayout(layout_col2)
+        layout_opcoes.addLayout(layout_col3)
 
         linha_separadora = QFrame()
         linha_separadora.setFrameShape(QFrame.HLine)
@@ -231,6 +268,57 @@ class AbaBackup(QWidget):
         for item in self.lista_pastas.selectedItems():
             self.lista_pastas.takeItem(self.lista_pastas.row(item))
 
+    def carregar_config_salvo(self):
+        config = logic.load_config()
+        if not config: return
+        if config.get("destination"):
+            self.campo_destino.setText(config["destination"])
+        if config.get("origin"):
+            origins = config["origin"] if isinstance(config["origin"], list) else [config["origin"]]
+            for org in origins:
+                if org and org not in [self.lista_pastas.item(i).text() for i in range(self.lista_pastas.count())]:
+                    self.lista_pastas.addItem(org)
+        if config.get("compression"):
+            self.combo_compressao.setCurrentText(config["compression"])
+        if config.get("incremental"):
+            self.chk_incremental.setChecked(config["incremental"])
+        if config.get("exclusions"):
+            self.campo_regex.setText(config["exclusions"])
+        if config.get("volume_size"):
+            self.campo_volume.setText(config["volume_size"])
+        if config.get("retention") is not None:
+            self.campo_retention.setText(str(config["retention"]))
+        if config.get("folder_exclusions"):
+            folder_exc = config["folder_exclusions"]
+            if isinstance(folder_exc, list):
+                self.campo_folder_exc.setText(", ".join(folder_exc))
+            else:
+                self.campo_folder_exc.setText(folder_exc)
+
+    def salvar_config_atual(self):
+        origens = [self.lista_pastas.item(i).text() for i in range(self.lista_pastas.count())]
+        folder_exc_text = self.campo_folder_exc.text().strip()
+        folder_exc_list = [f.strip() for f in folder_exc_text.split(',') if f.strip()] if folder_exc_text else []
+        try:
+            retention_val = int(self.campo_retention.text().strip() or "5")
+        except ValueError:
+            retention_val = 5
+
+        config = {
+            "origin": origens,
+            "destination": self.campo_destino.text().strip(),
+            "compression": self.combo_compressao.currentText(),
+            "incremental": self.chk_incremental.isChecked(),
+            "exclusions": self.campo_regex.text().strip(),
+            "volume_size": self.campo_volume.text().strip(),
+            "retention": retention_val,
+            "folder_exclusions": folder_exc_list,
+        }
+        senha = self.campo_senha.text()
+        if senha:
+            config["password"] = senha
+        logic.save_config(config)
+
     def alternar_pausa(self):
         if hasattr(logic, 'toggle_pause_backup'):
             logic.toggle_pause_backup()
@@ -258,6 +346,13 @@ class AbaBackup(QWidget):
         senha_digitada = self.campo_senha.text()
         incremental_ativo = self.chk_incremental.isChecked()
         exclusoes = self.campo_regex.text()
+        volume_size = self.campo_volume.text().strip()
+        folder_exclusions = [f.strip() for f in self.campo_folder_exc.text().split(',') if f.strip()]
+
+        try:
+            retention_val = int(self.campo_retention.text().strip() or "5")
+        except ValueError:
+            retention_val = 5
 
         if not destino or not origens:
             QMessageBox.warning(self, "Aviso", "Por favor, defina um destino e origens.")
@@ -267,6 +362,8 @@ class AbaBackup(QWidget):
             if os.path.abspath(destino).startswith(os.path.abspath(org)):
                 QMessageBox.critical(self, "Erro", "Destino não pode estar dentro da origem.")
                 return
+
+        self.salvar_config_atual()
 
         self.btn_iniciar.hide()
         self.btn_pausar.show()
@@ -281,10 +378,23 @@ class AbaBackup(QWidget):
         self.texto_status.setText(f"⏳ Comprimindo arquivos (Modo: {tipo_bkp}), por favor aguarde...")
         self.texto_status.setStyleSheet("color: #f39c12; font-weight: bold;")
 
-        self.worker = TrabalhadorBackup(origens, destino, nivel_compressao, senha_digitada, incremental_ativo, exclusoes)
+        self.worker = TrabalhadorBackup(
+            origens, destino, nivel_compressao, senha_digitada, incremental_ativo, exclusoes,
+            retention=retention_val, volume_size=volume_size, folder_exclusions=folder_exclusions
+        )
         self.worker.sucesso.connect(self.backup_concluido)
         self.worker.erro.connect(self.backup_falhou)
+        self.worker.progresso.connect(self.atualizar_progresso)
+        self.worker.log_emitido.connect(self.exibir_log)
         self.worker.start()
+
+    def atualizar_progresso(self, valor):
+        self.barra_progresso.setRange(0, 100)
+        self.barra_progresso.setValue(valor)
+        self.barra_progresso.setTextVisible(True)
+
+    def exibir_log(self, mensagem):
+        self.texto_status.setText(mensagem)
 
     def backup_concluido(self, resultado):
         self.resetar_interface()
@@ -310,8 +420,85 @@ class AbaBackup(QWidget):
 
 
 # ==========================================
-# 3. ABA DE RESTAURAÇÃO
+# 5. ABA DE AGENDAMENTO
 # ==========================================
+class AbaAgendamento(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        self.combo_frequencia = QComboBox()
+        self.combo_frequencia.addItems(["Diário", "Semanal", "A cada 4 horas", "A cada 12 horas"])
+        self.combo_frequencia.setCursor(Qt.PointingHandCursor)
+        self.combo_frequencia.currentTextChanged.connect(self.on_freq_changed)
+
+        self.campo_hora = QLineEdit(placeholderText="HH:MM")
+        self.campo_hora.setText("03:00")
+
+        layout.addWidget(QLabel("<b>Frequência:</b>"))
+        layout.addWidget(self.combo_frequencia)
+        layout.addWidget(QLabel("<b>Horário (para Diário/Semanal):</b>"))
+        layout.addWidget(self.campo_hora)
+
+        self.lbl_status = QLabel("Status: Agendador parado")
+        self.lbl_status.setStyleSheet("color: #f39c12; font-weight: bold; font-size: 13px;")
+        layout.addWidget(self.lbl_status)
+
+        layout_botoes = QHBoxLayout()
+        self.btn_ativar = QPushButton("▶ Ativar Agendador")
+        self.btn_ativar.setCursor(Qt.PointingHandCursor)
+        self.btn_ativar.setStyleSheet("QPushButton { background-color: #27ae60; color: white; font-weight: bold; border-radius: 4px; padding: 8px; }")
+        self.btn_ativar.clicked.connect(self.ativar_agendador)
+
+        self.btn_parar = QPushButton("⏹ Parar Agendador")
+        self.btn_parar.setCursor(Qt.PointingHandCursor)
+        self.btn_parar.setStyleSheet("QPushButton { background-color: #c0392b; color: white; font-weight: bold; border-radius: 4px; padding: 8px; }")
+        self.btn_parar.clicked.connect(self.parar_agendador)
+        self.btn_parar.setEnabled(False)
+
+        layout_botoes.addWidget(self.btn_ativar)
+        layout_botoes.addWidget(self.btn_parar)
+        layout_botoes.addStretch()
+        layout.addLayout(layout_botoes)
+
+        layout.addStretch()
+
+    def on_freq_changed(self, freq):
+        is_time_based = freq in ("Diário", "Semanal")
+        self.campo_hora.setEnabled(is_time_based)
+        if is_time_based:
+            self.campo_hora.setPlaceholderText("HH:MM")
+        else:
+            self.campo_hora.setPlaceholderText("Não aplicável para intervalos")
+            self.campo_hora.setText("")
+
+    def ativar_agendador(self):
+        config = logic.load_config()
+        config["frequency"] = self.combo_frequencia.currentText()
+        config["time"] = self.campo_hora.text().strip() or "03:00"
+
+        if not config.get("origin") and not config.get("destination"):
+            QMessageBox.warning(self, "Aviso", "Configure origem e destino na aba Backup primeiro.")
+            return
+
+        logic.start_scheduler(config)
+        self.lbl_status.setText("Status: Agendador ativo")
+        self.lbl_status.setStyleSheet("color: #27ae60; font-weight: bold; font-size: 13px;")
+        self.btn_ativar.setEnabled(False)
+        self.btn_parar.setEnabled(True)
+
+    def parar_agendador(self):
+        logic.stop_scheduler()
+        self.lbl_status.setText("Status: Agendador parado")
+        self.lbl_status.setStyleSheet("color: #f39c12; font-weight: bold; font-size: 13px;")
+        self.btn_ativar.setEnabled(True)
+        self.btn_parar.setEnabled(False)
+
 class AbaRestauracao(QWidget):
     def __init__(self):
         super().__init__()
@@ -431,8 +618,61 @@ class AbaRestauracao(QWidget):
 
 
 # ==========================================
-# 4. ABA DE COMPARAÇÃO
+# 4. ABA DE LOGS
 # ==========================================
+class AbaLogs(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        self.texto_log = QTextEdit()
+        self.texto_log.setReadOnly(True)
+        self.texto_log.setStyleSheet("QTextEdit { background-color: #1e1e1e; color: #00ff00; font-family: monospace; font-size: 12px; padding: 10px; border: 1px solid #3f3f46; border-radius: 4px; }")
+
+        layout_botoes = QHBoxLayout()
+        self.btn_limpar = QPushButton("🗑️ Limpar Logs")
+        self.btn_limpar.setCursor(Qt.PointingHandCursor)
+        self.btn_limpar.setStyleSheet("QPushButton { background-color: #c0392b; color: white; font-weight: bold; border-radius: 4px; padding: 8px; }")
+        self.btn_limpar.clicked.connect(self.limpar_logs)
+
+        self.btn_exportar = QPushButton("📄 Exportar")
+        self.btn_exportar.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar.setStyleSheet("QPushButton { background-color: #2980b9; color: white; font-weight: bold; border-radius: 4px; padding: 8px; }")
+        self.btn_exportar.clicked.connect(self.exportar_logs)
+
+        layout_botoes.addWidget(self.btn_limpar)
+        layout_botoes.addWidget(self.btn_exportar)
+        layout_botoes.addStretch()
+
+        layout.addWidget(QLabel("<b>Logs de Execução:</b>"))
+        layout.addWidget(self.texto_log)
+        layout.addLayout(layout_botoes)
+
+    def adicionar_log(self, mensagem):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.texto_log.append(f"[{timestamp}] {mensagem}")
+        cursor = self.texto_log.textCursor()
+        cursor.movePosition(cursor.End)
+        self.texto_log.setTextCursor(cursor)
+
+    def limpar_logs(self):
+        self.texto_log.clear()
+
+    def exportar_logs(self):
+        caminho, _ = QFileDialog.getSaveFileName(self, "Exportar Logs", "backup_logs.txt", "Arquivo de Texto (*.txt)")
+        if caminho:
+            try:
+                with open(caminho, "w", encoding="utf-8") as f:
+                    f.write(self.texto_log.toPlainText())
+                QMessageBox.information(self, "Sucesso", f"Logs exportados para:\n{caminho}")
+            except OSError as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao exportar logs:\n{e}")
+
 class AbaComparar(QWidget):
     def __init__(self):
         super().__init__()
@@ -534,7 +774,71 @@ class AbaComparar(QWidget):
 
 
 # ==========================================
-# 5. ABA DE DASHBOARD
+# 6. ABA SOBRE
+# ==========================================
+class AbaSobre(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setAlignment(Qt.AlignTop)
+
+        titulo = QLabel("💾 Backup Fácil Professional")
+        titulo.setStyleSheet("color: #ffffff; font-size: 28px; font-weight: bold; border: none;")
+        titulo.setAlignment(Qt.AlignCenter)
+
+        # ✅ Agora a versão é puxada automaticamente do logic.py
+        versao = QLabel(f"Versão {logic.APP_VERSION}")
+        versao.setStyleSheet("color: #27ae60; font-size: 16px; font-weight: bold; border: none;")
+        versao.setAlignment(Qt.AlignCenter)
+
+        licenca = QLabel("Licença: GNU General Public License v3.0 (GPL-3.0)")
+        licenca.setStyleSheet("color: #f39c12; font-size: 13px; border: none;")
+        licenca.setAlignment(Qt.AlignCenter)
+
+        separador = QFrame()
+        separador.setFrameShape(QFrame.HLine)
+        separador.setStyleSheet("color: #3f3f46;")
+
+        descricao = QLabel(
+            "Ferramenta de desktop robusta e multiplataforma para automação, "
+            "gestão e criptografia de backups locais.\n\n"
+            "• Backups completos e incrementais com motor SQLite/MD5\n"
+            "• Criptografia AES-256 via compressão .7z\n"
+            "• Filtros avançados por extensão e Expressões Regulares\n"
+            "• Comparador de arquivos entre backups\n"
+            "• Agendamento inteligente com proteção Thread Safety\n"
+            "• Senhas protegidas pelo Keyring do sistema operacional"
+        )
+        descricao.setStyleSheet("color: #e0e0e0; font-size: 13px; border: none;")
+        descricao.setWordWrap(True)
+
+        tecnologias = QLabel(
+            "<b>Tecnologias:</b> Python 3 · PySide6 (Qt) · py7zr · SQLite3 · Keyring · schedule · plyer"
+        )
+        tecnologias.setStyleSheet("color: #a0a0a0; font-size: 12px; border: none;")
+        tecnologias.setWordWrap(True)
+
+        autor = QLabel("Desenvolvido por VaGNaroK com auxílio de asistente de IA")
+        autor.setStyleSheet("color: #7f8c8d; font-size: 12px; border: none; font-style: italic;")
+        autor.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(titulo)
+        layout.addWidget(versao)
+        layout.addWidget(licenca)
+        layout.addWidget(separador)
+        layout.addWidget(descricao)
+        layout.addWidget(tecnologias)
+        layout.addStretch()
+        layout.addWidget(autor)
+
+
+# ==========================================
+# 7. ABA DE DASHBOARD
 # ==========================================
 class AbaDashboard(QWidget):
     def __init__(self):
@@ -635,7 +939,7 @@ class AbaDashboard(QWidget):
         tamanho_total_mb = 0.0
         for row in range(total_linhas):
             try: tamanho_total_mb += float(self.tabela.item(row, 2).text().replace(" MB", "").strip())
-            except: pass
+            except (ValueError, AttributeError): pass
         self.lbl_tamanho_total.setText(f"{tamanho_total_mb:.2f} MB")
 
     def carregar_dados(self):
@@ -646,10 +950,17 @@ class AbaDashboard(QWidget):
                 if not historico: return 
                 for row_idx, item in enumerate(historico):
                     self.tabela.insertRow(row_idx)
-                    self.tabela.setItem(row_idx, 0, QTableWidgetItem(str(item.get('date', item.get('timestamp', '-')))))
+                    ts = item.get('timestamp', '-')
+                    try:
+                        dt = datetime.fromisoformat(ts)
+                        ts = dt.strftime("%d/%m/%Y %H:%M")
+                    except (ValueError, TypeError):
+                        pass
+                    self.tabela.setItem(row_idx, 0, QTableWidgetItem(str(ts)))
                     self.tabela.setItem(row_idx, 1, QTableWidgetItem(str(item.get('type', 'Completo'))))
                     tamanho_mb = item.get('size', 0) / (1024 * 1024)
                     self.tabela.setItem(row_idx, 2, QTableWidgetItem(f"{tamanho_mb:.2f} MB"))
                     self.tabela.setItem(row_idx, 3, QTableWidgetItem(str(item.get('status', '-'))))
                 self.recalcular_cards_da_tabela()
-        except: pass
+        except Exception as e:
+            pass

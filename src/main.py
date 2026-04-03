@@ -3,7 +3,7 @@ import os
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt
-from ui_components import AbaBackup, AbaDashboard, AbaRestauracao, AbaComparar
+from ui_components import AbaBackup, AbaDashboard, AbaRestauracao, AbaComparar, AbaLogs, AbaAgendamento, AbaSobre
 
 # 🧭 GPS PARA IMAGENS
 def get_asset_path(filename):
@@ -84,11 +84,17 @@ class JanelaPrincipal(QMainWindow):
         self.aba_restauracao = AbaRestauracao()
         self.aba_comparar = AbaComparar()
         self.aba_dashboard = AbaDashboard()
+        self.aba_logs = AbaLogs()
+        self.aba_agendamento = AbaAgendamento()
+        self.aba_sobre = AbaSobre()
 
         self.tabs.addTab(self.aba_backup, "💾 Backup")
         self.tabs.addTab(self.aba_restauracao, "🕒 Restauração")
         self.tabs.addTab(self.aba_comparar, "⚖️ Comparar")
         self.tabs.addTab(self.aba_dashboard, "📈 Dashboard")
+        self.tabs.addTab(self.aba_logs, "📝 Logs")
+        self.tabs.addTab(self.aba_agendamento, "📅 Agendamento")
+        self.tabs.addTab(self.aba_sobre, "ℹ️ Sobre")
 
         layout_principal.addWidget(self.tabs)
 
