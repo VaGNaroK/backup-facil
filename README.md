@@ -2,10 +2,10 @@
 
 Uma ferramenta de desktop robusta e multiplataforma para automação, gestão e criptografia de backups locais. Desenvolvida em Python com uma interface gráfica moderna e responsiva utilizando **PySide6** (Qt).
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-0.3.4-blue)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-0.3.7-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-green)
 ![PySide6](https://img.shields.io/badge/GUI-PySide6-brightgreen)
-![Licença](https://img.shields.io/badge/Licen%C3%A7a-MIT-orange)
+![Licença](https://img.shields.io/badge/Licen%C3%A7a-GPL--3.0-orange)
 
 ## ✨ Principais Funcionalidades
 
