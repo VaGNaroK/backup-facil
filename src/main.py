@@ -88,6 +88,9 @@ class JanelaPrincipal(QMainWindow):
         self.aba_agendamento = AbaAgendamento()
         self.aba_sobre = AbaSobre()
 
+        # ✅ CONEXÃO MÁGICA: Ligando o sinal de logs da Aba Backup para a Aba Logs
+        self.aba_backup.novo_log.connect(self.aba_logs.adicionar_log)
+
         self.tabs.addTab(self.aba_backup, "💾 Backup")
         self.tabs.addTab(self.aba_restauracao, "🕒 Restauração")
         self.tabs.addTab(self.aba_comparar, "⚖️ Comparar")

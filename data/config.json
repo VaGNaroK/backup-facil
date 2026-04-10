@@ -1,0 +1,12 @@
+{
+    "origin": [
+        "~/Imagens"
+    ],
+    "destination": "~",
+    "compression": "Normal",
+    "incremental": false,
+    "exclusions": "",
+    "volume_size": "0",
+    "retention": 5,
+    "folder_exclusions": []
+}

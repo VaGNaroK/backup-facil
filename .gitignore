@@ -1,40 +1,5 @@
-# ==========================================
-# 🛑 IGNORAR ARQUIVOS DO PYTHON
-# ==========================================
-__pycache__/
-*.py[cod]
-*$py.class
-
-# ==========================================
-# 🛑 IGNORAR AMBIENTE VIRTUAL
-# ==========================================
 venv/
-env/
-.env
-
-# ==========================================
-# 🛑 IGNORAR DADOS LOCAIS E SEGURANÇA
-# ==========================================
-# Não subir configurações, senhas e histórico pessoal
-data/
-*.db
-*.sqlite3
-*.log
-
-# ==========================================
-# 🛑 IGNORAR COMPILADORES E INSTALADORES
-# ==========================================
-# Ignora o lixo do PyInstaller e os pacotes pesados gerados
+__pycache__/
 build/
 dist/
-*.spec
 *.deb
-*.exe
-*.AppImage
-
-# ==========================================
-# 🛑 IGNORAR CACHES DE EDITORES (VS Code, etc)
-# ==========================================
-.vscode/
-.idea/
-.DS_Store

@@ -17,7 +17,7 @@ from plyer import notification
 # ==========================================
 # FONTE ÚNICA DE VERDADE (VERSÃO DO APP)
 # ==========================================
-APP_VERSION = "0.3.7"
+APP_VERSION = "0.3.8"
 
 logger = logging.getLogger("backup_facil")
 logger.setLevel(logging.DEBUG)

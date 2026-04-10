@@ -1,0 +1,22 @@
+[
+    {
+        "timestamp": "2026-04-09T20:55:20.929492",
+        "archive": "Backup_completo_2026-04-09_20-55-16.7z",
+        "path": "/home/vagnarok/Backup_completo_2026-04-09_20-55-16.7z",
+        "size": 12033830,
+        "files": 3,
+        "status": "success",
+        "duration": 4.636693954467773,
+        "type": "completo"
+    },
+    {
+        "timestamp": "2026-04-09T20:56:47.648735",
+        "archive": "Backup_completo_2026-04-09_20-56-42.7z",
+        "path": "/home/vagnarok/Backup_completo_2026-04-09_20-56-42.7z",
+        "size": 14130399,
+        "files": 4,
+        "status": "success",
+        "duration": 5.276550054550171,
+        "type": "completo"
+    }
+]

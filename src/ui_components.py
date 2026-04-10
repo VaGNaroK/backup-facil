@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, 
                                QCheckBox, QTextEdit)
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QTextCursor  # ✅ Importação adicionada para corrigir a Aba de Logs
 import logic
 
 # ==========================================
@@ -100,6 +101,8 @@ class TrabalhadorComparar(QThread):
 # 2. ABA DE BACKUP
 # ==========================================
 class AbaBackup(QWidget):
+    novo_log = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.worker = None
@@ -149,7 +152,7 @@ class AbaBackup(QWidget):
         layout_opcoes.setSpacing(15)
 
         layout_col1 = QVBoxLayout()
-        layout_col1.setSpacing(5) # Reduzido
+        layout_col1.setSpacing(5) 
         lbl_compressao = QLabel("Nível de Compressão:")
         self.combo_compressao = QComboBox()
         self.combo_compressao.addItems(["Armazenar", "Rápido", "Normal", "Máximo"])
@@ -326,10 +329,12 @@ class AbaBackup(QWidget):
                 self.btn_pausar.setText("▶️ Retomar")
                 self.btn_pausar.setStyleSheet("background-color: #2980b9; color: white; font-weight: bold;")
                 self.texto_status.setText("⏸️ Backup em pausa...")
+                self.novo_log.emit("⏸️ Backup colocado em pausa pelo usuário.")
             else:
                 self.btn_pausar.setText("⏸️ Pausar")
                 self.btn_pausar.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold;")
                 self.texto_status.setText("⏳ Retomando compressão...")
+                self.novo_log.emit("▶️ Backup retomado.")
 
     def abortar_processo(self):
         resposta = QMessageBox.question(self, "Confirmar", "Tem certeza que deseja abortar e cancelar o backup atual?", QMessageBox.Yes | QMessageBox.No)
@@ -338,6 +343,7 @@ class AbaBackup(QWidget):
                 logic.abort_backup()
                 self.btn_abortar.setEnabled(False)
                 self.texto_status.setText("🛑 Abortando processo... Aguarde a finalização da thread.")
+                self.novo_log.emit("🛑 Comando de abortar recebido. Interrompendo a thread de backup...")
 
     def disparar_backup(self):
         destino = self.campo_destino.text().strip()
@@ -378,6 +384,9 @@ class AbaBackup(QWidget):
         self.texto_status.setText(f"⏳ Comprimindo arquivos (Modo: {tipo_bkp}), por favor aguarde...")
         self.texto_status.setStyleSheet("color: #f39c12; font-weight: bold;")
 
+        self.novo_log.emit(f"🚀 INICIANDO BACKUP {tipo_bkp.upper()}")
+        self.novo_log.emit(f"Destino: {destino}")
+
         self.worker = TrabalhadorBackup(
             origens, destino, nivel_compressao, senha_digitada, incremental_ativo, exclusoes,
             retention=retention_val, volume_size=volume_size, folder_exclusions=folder_exclusions
@@ -395,16 +404,19 @@ class AbaBackup(QWidget):
 
     def exibir_log(self, mensagem):
         self.texto_status.setText(mensagem)
+        self.novo_log.emit(mensagem)
 
     def backup_concluido(self, resultado):
         self.resetar_interface()
         msg_sucesso = resultado[0] if isinstance(resultado, tuple) else str(resultado)
         self.texto_status.setText("✅ Backup Finalizado!")
+        self.novo_log.emit(f"✅ SUCESSO: {msg_sucesso}")
         QMessageBox.information(self, "Sucesso", msg_sucesso)
 
     def backup_falhou(self, erro_msg):
         self.resetar_interface()
         self.texto_status.setText("❌ Processo interrompido ou falhou.")
+        self.novo_log.emit(f"❌ ERRO GRAVE: {erro_msg}")
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Critical)
         msg_box.setWindowTitle("Atenção")
@@ -657,7 +669,8 @@ class AbaLogs(QWidget):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.texto_log.append(f"[{timestamp}] {mensagem}")
         cursor = self.texto_log.textCursor()
-        cursor.movePosition(cursor.End)
+        # ✅ CORREÇÃO: Usando a propriedade correta do PySide6 para rolar a tela
+        cursor.movePosition(QTextCursor.End)
         self.texto_log.setTextCursor(cursor)
 
     def limpar_logs(self):
@@ -791,7 +804,6 @@ class AbaSobre(QWidget):
         titulo.setStyleSheet("color: #ffffff; font-size: 28px; font-weight: bold; border: none;")
         titulo.setAlignment(Qt.AlignCenter)
 
-        # ✅ Agora a versão é puxada automaticamente do logic.py
         versao = QLabel(f"Versão {logic.APP_VERSION}")
         versao.setStyleSheet("color: #27ae60; font-size: 16px; font-weight: bold; border: none;")
         versao.setAlignment(Qt.AlignCenter)
@@ -823,7 +835,7 @@ class AbaSobre(QWidget):
         tecnologias.setStyleSheet("color: #a0a0a0; font-size: 12px; border: none;")
         tecnologias.setWordWrap(True)
 
-        autor = QLabel("Desenvolvido por VaGNaroK com auxílio de asistente de IA")
+        autor = QLabel("Desenvolvido por VaGNaroK com um help de IA")
         autor.setStyleSheet("color: #7f8c8d; font-size: 12px; border: none; font-style: italic;")
         autor.setAlignment(Qt.AlignCenter)
 
