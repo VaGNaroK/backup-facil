@@ -90,6 +90,7 @@ class JanelaPrincipal(QMainWindow):
 
         # ✅ CONEXÃO MÁGICA: Ligando o sinal de logs da Aba Backup para a Aba Logs
         self.aba_backup.novo_log.connect(self.aba_logs.adicionar_log)
+        self.aba_restauracao.novo_log.connect(self.aba_logs.adicionar_log)
 
         self.tabs.addTab(self.aba_backup, "💾 Backup")
         self.tabs.addTab(self.aba_restauracao, "🕒 Restauração")

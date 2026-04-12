@@ -4,6 +4,7 @@ Este arquivo registra todas as mudanças notáveis feitas no projeto Backup Fác
 ## [0.3.9] - 2026-04-12
 
 ### Adicionado
+- **Pipeline de Compilação:** Adicionado o script `scripts/gerar_flatpak.sh` para automatizar inteiramente a leitura da versão, compilação na sandbox do KDE e geração do pacote final `.flatpak` com a nomenclatura correta.
 - **Suporte Oficial a Flatpak:** Criado o manifesto YAML e estrutura de build para empacotamento em sandbox (isolamento de segurança nativo do Linux).
 - **Monitor de Desempenho:** Adicionada uma thread paralela que calcula e exibe a velocidade real de gravação (MB/s) diretamente na interface gráfica, mostrando que ainda está rodando durante o processamento de arquivos gigantes.
 

@@ -37,6 +37,10 @@ BACKUP_FACIL/
 │   ├── logic.py            # Motor de backup e GPS de diretórios
 │   └── ui_components.py    # Interface e Monitor Cardíaco (MB/s)
 ├── assets/                 # Ícone (256x256) e recursos visuais
+├── scripts/                # Scripts de compilação e empacotamento
+│   ├── gerar_deb.sh        # Script gerador do instalador Linux Mint/Debian
+│   ├── gerar_exe.bat       # Script gerador do executável Windows
+│   └── gerar_flatpak.sh    # Script automatizado para compilar e empacotar o Flatpak
 ├── io.github.vagnarok.BackupFacilPro.yml  # Manifesto Flatpak
 ├── requirements.txt        # Dependências do projeto
 └── README.md               # Documentação
@@ -64,16 +68,23 @@ BACKUP_FACIL/
 
 ## 📦 Como Compilar e Instalar (Linux - Flatpak)
 
-Este é o método recomendado para garantir compatibilidade universal:
+Este é o método recomendado para garantir compatibilidade universal. Todo o processo de compilação e nomeação da versão atual foi automatizado.
 
-1. **Construir e Instalar Localmente:**
+1. **Dê permissão de execução ao script (apenas na primeira vez):**
    ```bash
-   flatpak-builder build-dir io.github.vagnarok.BackupFacilPro.yml --force-clean --user --install
+   chmod +x scripts/gerar_flatpak.sh
    ```
 
-2. **Gerar o arquivo instalador (.flatpak):**
+2. **Gere o arquivo instalador:**
+   O script lerá automaticamente a versão do aplicativo direto no código fonte e compilará o pacote `.flatpak` na raiz do projeto.
    ```bash
-   flatpak build-bundle ~/.local/share/flatpak/repo Backup_Facil_Pro_v0.3.9.flatpak io.github.vagnarok.BackupFacilPro
+   ./scripts/gerar_flatpak.sh
+   ```
+
+3. **Instale o pacote gerado:**
+   Você pode dar dois cliques no arquivo gerado através do seu gerenciador de janelas, ou usar o terminal:
+   ```bash
+   flatpak install --user ./Backup_Facil_Pro_v0.3.9.flatpak
    ```
 
 ## 📦 Como Compilar e Instalar (Linux - .deb)

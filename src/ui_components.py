@@ -528,6 +528,8 @@ class AbaAgendamento(QWidget):
         self.btn_parar.setEnabled(False)
 
 class AbaRestauracao(QWidget):
+    novo_log = Signal(str) # ✅ NOVO: O alto-falante que envia os textos para a aba de Logs!
+
     def __init__(self):
         super().__init__()
         self.worker = None
@@ -619,6 +621,11 @@ class AbaRestauracao(QWidget):
         self.barra_progresso.show()
         self.texto_status.setText("Descompactando... Isso pode levar alguns minutos.")
 
+        # ✅ NOVO: Disparando o Log de Início
+        self.novo_log.emit("⏪ INICIANDO RESTAURAÇÃO DE ARQUIVO")
+        self.novo_log.emit(f"Origem: {arquivo}")
+        self.novo_log.emit(f"Destino: {destino}")
+
         self.worker = TrabalhadorRestauracao(arquivo, destino, senha_digitada)
         self.worker.sucesso.connect(self.restauracao_concluida)
         self.worker.erro.connect(self.restauracao_falhou)
@@ -627,11 +634,17 @@ class AbaRestauracao(QWidget):
     def restauracao_concluida(self, resultado):
         self.resetar_interface()
         self.texto_status.setText("✅ Restauração concluída com sucesso!")
+        
+        # ✅ NOVO: Disparando o Log de Sucesso
+        self.novo_log.emit(f"✅ SUCESSO: {resultado}")
         QMessageBox.information(self, "Sucesso", resultado)
 
     def restauracao_falhou(self, erro_msg):
         self.resetar_interface()
         self.texto_status.setText("❌ Erro na restauração.")
+        
+        # ✅ NOVO: Disparando o Log de Erro
+        self.novo_log.emit(f"❌ ERRO NA RESTAURAÇÃO: {erro_msg}")
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Critical)
         msg_box.setWindowTitle("Erro")
