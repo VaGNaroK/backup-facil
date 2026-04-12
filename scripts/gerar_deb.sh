@@ -1,106 +1,100 @@
 #!/bin/bash
 
-# ==========================================
-# CONFIGURAÇÕES DO PACOTE
-# ==========================================
-APP_NAME="backup-facil-pro"
-# ✅ Lê a versão dinamicamente do arquivo logic.py (Fonte Única de Verdade)
-APP_VERSION=$(grep 'APP_VERSION =' src/logic.py | cut -d '"' -f 2)
-ARCHITECTURE="amd64"
-MAINTAINER="VaGNaroK <vagnarok@email.com>"
-DESCRIPTION="Ferramenta profissional para backups locais, incrementais e criptografados."
+# Define as cores para o terminal
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # Sem cor
 
-# Apaga pacotes .deb antigos para não confundir a versão
-rm -f *.deb
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}  🛠️  GERADOR DE PACOTE .DEB AUTOMÁTICO  🛠️  ${NC}"
+echo -e "${BLUE}========================================${NC}"
 
-# Nome da pasta de construção do pacote
-BUILD_DIR="${APP_NAME}_${APP_VERSION}_${ARCHITECTURE}"
-
-echo "🚀 Iniciando a criação do pacote .deb para o Backup Fácil Pro v${APP_VERSION}..."
-
-# ==========================================
-# 1. CRIANDO A ESTRUTURA DE PASTAS DO DEBIAN
-# ==========================================
-mkdir -p "${BUILD_DIR}/DEBIAN"
-mkdir -p "${BUILD_DIR}/usr/bin"
-mkdir -p "${BUILD_DIR}/usr/share/applications"
-mkdir -p "${BUILD_DIR}/usr/share/pixmaps"
-
-# ==========================================
-# 2. COPIANDO OS ARQUIVOS DO SEU PROJETO
-# ==========================================
-echo "📦 Copiando o binário e os assets..."
-
-if [ ! -f "dist/Backup_Facil_Pro" ]; then
-    echo "❌ Erro: Executável não encontrado em dist/Backup_Facil_Pro."
-    echo "Rode o PyInstaller primeiro!"
+# 1. Verifica se está rodando dentro do VENV
+if [[ "$VIRTUAL_ENV" == "" ]]; then
+    echo -e "${RED}❌ Erro: Ambiente virtual não ativado!${NC}"
+    echo -e "Rode: ${YELLOW}source venv/bin/activate${NC} antes de executar este script."
     exit 1
 fi
-cp "dist/Backup_Facil_Pro" "${BUILD_DIR}/usr/bin/${APP_NAME}"
-cp "assets/icon.png" "${BUILD_DIR}/usr/share/pixmaps/${APP_NAME}.png"
 
-# ==========================================
-# 3. CRIANDO O ARQUIVO DE CONTROLE (DEBIAN/control)
-# ==========================================
-echo "📝 Gerando o arquivo de controle..."
-cat <<EOF > "${BUILD_DIR}/DEBIAN/control"
-Package: ${APP_NAME}
-Version: ${APP_VERSION}
-Section: utils
-Priority: optional
-Architecture: ${ARCHITECTURE}
-Maintainer: ${MAINTAINER}
-Depends: libc6 (>= 2.31)
-Description: ${DESCRIPTION}
- Backup Fácil Professional é uma interface gráfica em PySide6 
- para automação e gestão de backups com suporte a compressão 7z, 
- criptografia AES-256 e backups incrementais.
-EOF
+# 2. Extrai a versão dinamicamente do logic.py
+VERSION=$(grep -oP 'APP_VERSION = "\K[^"]+' src/logic.py)
+if [ -z "$VERSION" ]; then
+    echo -e "${RED}❌ Erro: Não foi possível ler a APP_VERSION no src/logic.py${NC}"
+    exit 1
+fi
+echo -e "📦 Versão detectada: ${GREEN}v${VERSION}${NC}"
 
-# ==========================================
-# 4. CRIANDO O ATALHO DO MENU (.desktop)
-# ==========================================
-echo "🖥️ Gerando atalho para o Menu do Linux Mint..."
-cat <<EOF > "${BUILD_DIR}/usr/share/applications/${APP_NAME}.desktop"
+# 3. Verifica e instala o PyInstaller se necessário
+if ! python -c "import PyInstaller" &> /dev/null; then
+    echo -e "${YELLOW}⚠️ PyInstaller não encontrado. Instalando no ambiente virtual...${NC}"
+    pip install pyinstaller
+else
+    echo -e "${GREEN}✅ PyInstaller detectado.${NC}"
+fi
+
+# 4. Compila o executável com PyInstaller
+echo -e "\n⏳ Compilando o binário a partir do código fonte..."
+python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" \
+    --icon="assets/icon.png" \
+    --add-data "assets:assets" \
+    --hidden-import logic \
+    --hidden-import ui_components \
+    src/main.py
+
+# Verifica se a compilação teve sucesso
+if [ ! -f "dist/Backup_Facil_Pro" ]; then
+    echo -e "${RED}❌ Erro: A compilação falhou. Executável não gerado.${NC}"
+    exit 1
+fi
+
+# 5. Prepara a estrutura de pastas do pacote Debian
+echo -e "\n⏳ Montando a estrutura do pacote .deb..."
+BUILD_DIR="build_deb"
+rm -rf $BUILD_DIR
+mkdir -p $BUILD_DIR/DEBIAN
+mkdir -p $BUILD_DIR/usr/bin
+mkdir -p $BUILD_DIR/usr/share/applications
+mkdir -p $BUILD_DIR/usr/share/icons/hicolor/256x256/apps
+
+# 6. Copia os arquivos para a estrutura
+cp dist/Backup_Facil_Pro $BUILD_DIR/usr/bin/backup-facil-pro
+chmod +x $BUILD_DIR/usr/bin/backup-facil-pro
+cp assets/icon.png $BUILD_DIR/usr/share/icons/hicolor/256x256/apps/backup-facil-pro.png
+
+# 7. Cria o arquivo de atalho (.desktop) para o Menu Iniciar
+cat <<EOF > $BUILD_DIR/usr/share/applications/backup-facil-pro.desktop
 [Desktop Entry]
-Version=1.0
-Name=Backup Fácil Professional
-Comment=Faça backups seguros e criptografados
-Exec=/usr/bin/${APP_NAME}
-Icon=/usr/share/pixmaps/${APP_NAME}.png
+Name=Backup Fácil Pro
+Comment=Ferramenta profissional para automação de backups
+Exec=/usr/bin/backup-facil-pro
+Icon=backup-facil-pro
 Terminal=false
 Type=Application
-Categories=Utility;System;
+Categories=Utility;System;Archiving;
 EOF
 
-# ==========================================
-# 5. AJUSTANDO PERMISSÕES
-# ==========================================
-echo "🔐 Ajustando permissões do sistema..."
-chmod 755 "${BUILD_DIR}/DEBIAN"
-chmod 644 "${BUILD_DIR}/DEBIAN/control"
-chmod 755 "${BUILD_DIR}/usr/bin/${APP_NAME}"
-chmod 644 "${BUILD_DIR}/usr/share/applications/${APP_NAME}.desktop"
-chmod 644 "${BUILD_DIR}/usr/share/pixmaps/${APP_NAME}.png"
+# 8. Cria o arquivo de controle do Debian
+cat <<EOF > $BUILD_DIR/DEBIAN/control
+Package: backup-facil-pro
+Version: $VERSION
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: VaGNaroK
+Description: Ferramenta de desktop robusta para automação, gestão e criptografia de backups locais.
+EOF
 
-# ==========================================
-# 6. CONSTRUINDO O PACOTE FINAL
-# ==========================================
-echo "⚙️ Empacotando o .deb..."
-dpkg-deb --build "${BUILD_DIR}"
+# 9. Gera o pacote final .deb
+DEB_NAME="backup-facil-pro_${VERSION}_amd64.deb"
+echo -e "\n⏳ Fechando o pacote..."
+dpkg-deb --build $BUILD_DIR $DEB_NAME
 
-# ==========================================
-# 7. LIMPEZA PROFUNDA DE CACHE
-# ==========================================
-echo "🧹 Limpando caches de compilação e arquivos residuais..."
-# Remove a pasta temporária de construção do Debian
-rm -rf "${BUILD_DIR}"
-# Remove as pastas geradas pelo PyInstaller
-rm -rf "build/"
-rm -rf "dist/"
-# Remove qualquer arquivo .spec em qualquer lugar do projeto de forma absoluta
-find . -type f -name "*.spec" -delete
-# Procura e remove recursivamente todas as pastas __pycache__ do Python de forma silenciosa
-find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+# 10. Limpeza da sujeira de compilação
+rm -rf $BUILD_DIR
+rm -rf build/
+rm -f Backup_Facil_Pro.spec
 
-echo "✅ SUCESSO! O pacote ${BUILD_DIR}.deb foi criado na raiz do seu projeto e o ambiente foi limpo."
+echo -e "\n${GREEN}✅ Sucesso Absoluto!${NC}"
+echo -e "O instalador ${BLUE}${DEB_NAME}${NC} está pronto na raiz do seu projeto!"

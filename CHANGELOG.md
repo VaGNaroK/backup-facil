@@ -4,9 +4,14 @@ Este arquivo registra todas as mudanças notáveis feitas no projeto Backup Fác
 ## [0.3.9] - 2026-04-12
 
 ### Adicionado
-- **Pipeline de Compilação:** Adicionado o script `scripts/gerar_flatpak.sh` para automatizar inteiramente a leitura da versão, compilação na sandbox do KDE e geração do pacote final `.flatpak` com a nomenclatura correta.
 - **Suporte Oficial a Flatpak:** Criado o manifesto YAML e estrutura de build para empacotamento em sandbox (isolamento de segurança nativo do Linux).
-- **Monitor de Desempenho:** Adicionada uma thread paralela que calcula e exibe a velocidade real de gravação (MB/s) diretamente na interface gráfica, mostrando que ainda está rodando durante o processamento de arquivos gigantes.
+- **Monitor de Desempenho em Tempo Real:** Adicionada uma thread paralela que calcula e exibe a velocidade real de gravação (MB/s) diretamente na interface gráfica.
+- **Pipeline de Compilação Automatizada:** - Inclusão do script `scripts/gerar_flatpak.sh` para automação total do empacotamento universal.
+    - Reestruturação completa do script `scripts/gerar_deb.sh`, que agora detecta o ambiente virtual, instala dependências (PyInstaller) automaticamente e gera o instalador .deb com um único comando.
+
+### Alterado
+- **Roteamento Dinâmico de Diretórios (GPS):** O motor de lógica agora detecta automaticamente o ambiente (Flatpak vs Nativo) para evitar erros de permissão "Read-Only".
+- **Integração de Logs:** A aba de Logs agora registra também as operações de Restauração, além das de Backup.
 
 ### Alterado
 - **Roteamento Dinâmico de Diretórios:** O motor de lógica agora detecta automaticamente variáveis de ambiente (`FLATPAK_ID`). Se rodar dentro da bolha de segurança, o app roteia a criação de dados para o cofre permitido do usuário, evitando o bloqueio de diretório "Read-Only".
