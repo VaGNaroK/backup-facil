@@ -3,3 +3,10 @@ __pycache__/
 build/
 dist/
 *.deb
+# =========================
+# Flatpak Build & Cache
+# =========================
+.flatpak-builder/
+build-dir/
+*.flatpak
+python3-requirements.json

@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, 
                                QCheckBox, QTextEdit)
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QTextCursor  # ✅ Importação adicionada para corrigir a Aba de Logs
+from PySide6.QtGui import QTextCursor
 import logic
 
 # ==========================================
@@ -18,6 +18,7 @@ class TrabalhadorBackup(QThread):
     erro = Signal(str)
     progresso = Signal(int)
     log_emitido = Signal(str)
+    velocidade = Signal(str)  # ✅ NOVO SINAL: Monitor Cardíaco
 
     def __init__(self, origens, destino, compressao, senha, incremental, exclusoes,
                  retention=5, volume_size="0", folder_exclusions=None):
@@ -45,7 +46,8 @@ class TrabalhadorBackup(QThread):
                 volume_size=self.volume_size,
                 folder_exclusions=self.folder_exclusions,
                 progress_callback=self.progresso.emit,
-                ui_log_callback=self.log_emitido.emit
+                ui_log_callback=self.log_emitido.emit,
+                speed_callback=self.velocidade.emit  # ✅ ENVIANDO A VELOCIDADE PARA A TELA
             )
             self.sucesso.emit(resultado)
         except Exception as e:
@@ -240,6 +242,12 @@ class AbaBackup(QWidget):
         self.barra_progresso.setFixedHeight(10)
         self.barra_progresso.hide() 
 
+        # ✅ NOVO: Label de Velocidade
+        self.lbl_velocidade = QLabel("")
+        self.lbl_velocidade.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 11px;")
+        self.lbl_velocidade.setAlignment(Qt.AlignCenter)
+        self.lbl_velocidade.hide()
+
         self.texto_status = QLabel("")
         self.texto_status.setAlignment(Qt.AlignCenter)
 
@@ -255,6 +263,7 @@ class AbaBackup(QWidget):
         layout_principal.addWidget(linha_separadora)
         layout_principal.addLayout(layout_acoes) 
         layout_principal.addWidget(self.barra_progresso)
+        layout_principal.addWidget(self.lbl_velocidade) # ✅ Inserido aqui!
         layout_principal.addWidget(self.texto_status)
 
     def selecionar_destino(self):
@@ -380,6 +389,10 @@ class AbaBackup(QWidget):
         
         self.barra_progresso.setRange(0, 0)
         self.barra_progresso.show()
+        
+        self.lbl_velocidade.setText("🚀 Iniciando motor de compressão...")
+        self.lbl_velocidade.show() # ✅ Exibe o monitor na tela
+
         tipo_bkp = "Incremental" if incremental_ativo else "Completo"
         self.texto_status.setText(f"⏳ Comprimindo arquivos (Modo: {tipo_bkp}), por favor aguarde...")
         self.texto_status.setStyleSheet("color: #f39c12; font-weight: bold;")
@@ -395,6 +408,7 @@ class AbaBackup(QWidget):
         self.worker.erro.connect(self.backup_falhou)
         self.worker.progresso.connect(self.atualizar_progresso)
         self.worker.log_emitido.connect(self.exibir_log)
+        self.worker.velocidade.connect(self.lbl_velocidade.setText) # ✅ LIGAÇÃO FINAL DA TELA COM A THREAD
         self.worker.start()
 
     def atualizar_progresso(self, valor):
@@ -429,6 +443,8 @@ class AbaBackup(QWidget):
         self.btn_pausar.hide()
         self.btn_abortar.hide()
         self.barra_progresso.hide()
+        self.lbl_velocidade.hide()
+        self.lbl_velocidade.setText("")
 
 
 # ==========================================
@@ -669,7 +685,6 @@ class AbaLogs(QWidget):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.texto_log.append(f"[{timestamp}] {mensagem}")
         cursor = self.texto_log.textCursor()
-        # ✅ CORREÇÃO: Usando a propriedade correta do PySide6 para rolar a tela
         cursor.movePosition(QTextCursor.End)
         self.texto_log.setTextCursor(cursor)
 

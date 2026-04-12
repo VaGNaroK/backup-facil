@@ -1,6 +1,15 @@
 📝 Changelog - Backup Fácil Professional
 Este arquivo registra todas as mudanças notáveis feitas no projeto Backup Fácil Professional desde o seu início.
 
+## [0.3.9] - 2026-04-12
+
+### Adicionado
+- **Suporte Oficial a Flatpak:** Criado o manifesto YAML e estrutura de build para empacotamento em sandbox (isolamento de segurança nativo do Linux).
+- **Monitor de Desempenho:** Adicionada uma thread paralela que calcula e exibe a velocidade real de gravação (MB/s) diretamente na interface gráfica, mostrando que ainda está rodando durante o processamento de arquivos gigantes.
+
+### Alterado
+- **Roteamento Dinâmico de Diretórios:** O motor de lógica agora detecta automaticamente variáveis de ambiente (`FLATPAK_ID`). Se rodar dentro da bolha de segurança, o app roteia a criação de dados para o cofre permitido do usuário, evitando o bloqueio de diretório "Read-Only".
+
 ## [0.3.8] - 2026-04-09
 ### 🐛 Corrigido
 - **Comunicação de Logs (UI):** Corrigido o bug onde a aba de Logs ficava vazia durante o processo. Implementado o sistema de `Signals` do PySide6 para transmitir o status da `AbaBackup` diretamente para a `AbaLogs`.

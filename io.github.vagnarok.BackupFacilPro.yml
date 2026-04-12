@@ -1,0 +1,56 @@
+app-id: io.github.vagnarok.BackupFacilPro
+runtime: org.kde.Platform
+runtime-version: '6.6'
+sdk: org.kde.Sdk
+command: backup-facil-pro
+finish-args:
+  # Permissões Gráficas
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Permissões Vitais do App
+  - --filesystem=host             
+  - --talk-name=org.freedesktop.Notifications 
+  - --talk-name=org.freedesktop.secrets       
+modules:
+  - name: backup-facil-pro
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network  # Dá internet para o construtor baixar o PySide6 correto
+    build-commands:
+      # A bolha baixa e instala as dependências com o próprio Python 3.11 dela
+      - pip3 install --prefix=/app -r requirements.txt
+      
+      # Criando a estrutura de pastas internas
+      - mkdir -p /app/share/backup-facil-pro/src
+      - mkdir -p /app/share/backup-facil-pro/assets
+      - mkdir -p /app/bin
+      
+      # Copiando os seus códigos-fonte
+      - cp -r src/* /app/share/backup-facil-pro/src/
+      - cp -r assets/* /app/share/backup-facil-pro/assets/
+      
+      # Criando o gatilho executável
+      - echo '#!/bin/sh' > /app/bin/backup-facil-pro
+      - echo 'exec python3 /app/share/backup-facil-pro/src/main.py "$@"' >> /app/bin/backup-facil-pro
+      - chmod +x /app/bin/backup-facil-pro
+      
+      # Registrando Ícone e Menu Iniciar
+      - install -Dm644 assets/icon.png /app/share/icons/hicolor/256x256/apps/io.github.vagnarok.BackupFacilPro.png
+      - mkdir -p /app/share/applications
+      - |
+        cat <<EOF > /app/share/applications/io.github.vagnarok.BackupFacilPro.desktop
+        [Desktop Entry]
+        Name=Backup Fácil Professional
+        Comment=Ferramenta profissional para backups locais, incrementais e criptografados.
+        Exec=backup-facil-pro
+        Icon=io.github.vagnarok.BackupFacilPro
+        Terminal=false
+        Type=Application
+        Categories=Utility;System;
+        EOF
+    sources:
+      - type: dir
+        path: .

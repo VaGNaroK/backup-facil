@@ -17,7 +17,7 @@ from plyer import notification
 # ==========================================
 # FONTE ÚNICA DE VERDADE (VERSÃO DO APP)
 # ==========================================
-APP_VERSION = "0.3.8"
+APP_VERSION = "0.3.9"
 
 logger = logging.getLogger("backup_facil")
 logger.setLevel(logging.DEBUG)
@@ -28,15 +28,22 @@ if not logger.handlers:
     logger.addHandler(_fh)
 
 # ==========================================
-# 🧭 GPS DE DIRETÓRIOS (ATUALIZADO PARA LINUX)
+# 🧭 GPS DE DIRETÓRIOS (ATUALIZADO PARA FLATPAK/LINUX)
 # ==========================================
 def get_base_dir():
-    """Descobre a raiz do projeto e define onde salvar os dados"""
+    """Descobre a raiz do projeto e define onde salvar os dados de forma segura"""
+    
+    # 1. Checagem VIP para Flatpak (O sandbox redireciona o ~ automaticamente para ~/.var/app/...)
+    if os.environ.get("FLATPAK_ID"):
+        flatpak_data_dir = os.path.join(os.path.expanduser("~"), "data")
+        os.makedirs(flatpak_data_dir, exist_ok=True)
+        return flatpak_data_dir
+
+    # 2. Checagem para instaladores nativos (.deb ou Windows .exe)
     if getattr(sys, 'frozen', False):
         exe_dir = os.path.dirname(sys.executable)
         # Se foi instalado globalmente no Linux (via .deb)
         if exe_dir == '/usr/bin':
-            # Salva na pasta pessoal do usuário: ~/.config/backup_facil_pro
             user_config_dir = os.path.join(os.path.expanduser("~"), ".config", "backup_facil_pro")
             os.makedirs(user_config_dir, exist_ok=True)
             return user_config_dir
@@ -44,13 +51,13 @@ def get_base_dir():
             # Se for um .exe portátil do Windows ou rodando de um pendrive
             return exe_dir
     else:
-        # Se for código fonte (.py)
+        # 3. Se for código fonte (.py) rodando solto no terminal
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 BASE_DIR = get_base_dir()
 
-# Se estiver rodando instalado no Linux (~/.config/...), salva direto lá
-if BASE_DIR.endswith("backup_facil_pro"): 
+# Ajuste no DATA_DIR para não duplicar pastas 'data' nas versões instaladas
+if os.environ.get("FLATPAK_ID") or BASE_DIR.endswith("backup_facil_pro"): 
     DATA_DIR = BASE_DIR
 else:
     # Se for código fonte ou portátil, cria a subpasta 'data'
@@ -64,7 +71,7 @@ PROFILES_FILE = os.path.join(DATA_DIR, "profiles.json")
 BACKUP_HISTORY_FILE = os.path.join(DATA_DIR, "backup_history.json")
 INCREMENTAL_DB_FILE = os.path.join(DATA_DIR, "incremental_db.db")
 
-# ✅ Novo: Fechaduras de Segurança (Thread Safety) para evitar colisões
+# ✅ Fechaduras de Segurança (Thread Safety) para evitar colisões
 history_lock = threading.Lock()
 config_lock = threading.Lock()
 
@@ -131,10 +138,9 @@ def contract_path(path):
     return path
 
 def save_config(data, profile_name="default"):
-    with config_lock: # ✅ Bloqueia o acesso a outras threads enquanto salva
+    with config_lock:
         data_to_save = data.copy()
         
-        # Remove a senha do dicionário para NÃO salvar em texto puro no JSON
         password = data_to_save.pop("password", None)
         
         if "origin" in data_to_save: data_to_save["origin"] = contract_path(data_to_save["origin"])
@@ -144,7 +150,6 @@ def save_config(data, profile_name="default"):
         profiles[profile_name] = {"name": profile_name, "config": data_to_save}
         save_profiles(profiles)
         
-        # ✅ Salva a senha de forma segura no Keyring do Linux/Windows
         if password:
             try:
                 keyring.set_password("backup_facil_pro", profile_name, password)
@@ -178,7 +183,6 @@ def load_config(profile_name=None):
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Erro ao ler config.json: {e}")
             
-        # ✅ Tenta recuperar a senha do Keyring de forma invisível
         try:
             pwd = keyring.get_password("backup_facil_pro", prof_name)
             if pwd: config["password"] = pwd
@@ -189,7 +193,7 @@ def load_config(profile_name=None):
 
 # ==================== HISTÓRICO E DB INCREMENTAL ====================
 def save_backup_history(archive_path, stats):
-    with history_lock: # ✅ Impede que o Agendador e o Usuário colidam no ficheiro
+    with history_lock:
         history = load_backup_history_nolock()
         history.append({
             "timestamp": datetime.now().isoformat(), "archive": os.path.basename(archive_path),
@@ -252,19 +256,15 @@ def get_file_hash(filepath):
 
 # ==================== FILTROS AVANÇADOS E REGEX ====================
 def is_excluded(filename, exclusions_list):
-    """✅ Novo: Verifica se o arquivo bate com a extensão ou com uma Regex complexa"""
     if not exclusions_list: return False
     for exc in exclusions_list:
         if not exc: continue
-        # Verifica se é apenas uma extensão simples (ex: .log)
         if exc.startswith('.') and filename.lower().endswith(exc.lower()):
             return True
-        # Tenta interpretar como Regex
         try:
             if re.search(exc, filename, re.IGNORECASE):
                 return True
         except re.error:
-            # Fallback seguro caso o utilizador digite uma regex inválida
             if exc.lower() in filename.lower():
                 return True
     return False
@@ -298,7 +298,7 @@ def get_files_to_backup_incremental(origins, exclusions=[], filters={}, folder_e
                     rel_path = os.path.relpath(src_file, origin)
                     
                     if not passes_advanced_filters(src_file, filters): continue
-                    if is_excluded(file, exclusions): continue # ✅ Usa o motor Regex
+                    if is_excluded(file, exclusions): continue 
                     
                     current_hash = get_file_hash(src_file)
                     current_mtime = os.path.getmtime(src_file)
@@ -324,7 +324,7 @@ def count_files(origins, exclusions=[], filters={}, folder_exclusions=[]):
                     if file.startswith('.'): continue
                     src_file = os.path.join(root, file)
                     if passes_advanced_filters(src_file, filters):
-                        if not is_excluded(file, exclusions): # ✅ Usa o motor Regex
+                        if not is_excluded(file, exclusions): 
                             total += 1
         except OSError as e:
             logger.warning(f"Erro ao contar arquivos em '{origin}': {e}")
@@ -380,22 +380,19 @@ def compare_backups(archive1, archive2, password1=None, password2=None):
         common = files1 & files2
         return {"total_1": len(files1), "total_2": len(files2), "only_in_first": list(only_in_1), "only_in_second": list(only_in_2), "common": len(common), "different": len(only_in_1) + len(only_in_2)}
     
-    # ✅ Tratamento específico para falta de senha
     except py7zr.exceptions.PasswordRequired: 
         return {"error": "VOCÊ NÃO ADICIONOU A SENHA! Um (ou ambos) os arquivos selecionados são criptografados."}
     
-    # ✅ Tratamento específico para senha errada ou arquivo corrompido
     except py7zr.exceptions.CrcError: 
         return {"error": "SENHA INCORRETA! Ou o arquivo de backup está corrompido."}
     
-    # ⚠️ Erros genéricos de permissão ou caminho
     except Exception as e: 
         return {"error": f"Erro inesperado: {str(e)}"}
 
 # ==================== BACKUP PRINCIPAL ====================
 def start_backup_process(origins, target, compression_level="Normal", password=None, 
                          exclusions="", retention=5, progress_callback=None, 
-                         ui_log_callback=None, incremental=False, filters={}, folder_exclusions=[],
+                         ui_log_callback=None, speed_callback=None, incremental=False, filters={}, folder_exclusions=[],
                          volume_size="0"):
     start_time = time.time()
     backup_pause_event.set(); backup_abort_event.clear() 
@@ -412,6 +409,39 @@ def start_backup_process(origins, target, compression_level="Normal", password=N
     archive_name = f"Backup_{backup_type}_{timestamp}.7z"
     full_dest_path = os.path.join(target, archive_name)
 
+    # ---------------------------------------------------------
+    # 💓 NOVO: MONITOR CARDÍACO DE VELOCIDADE (THREAD PARALELA)
+    # ---------------------------------------------------------
+    monitor_running = [True]
+    def speed_monitor():
+        last_size = 0
+        while monitor_running[0]:
+            time.sleep(1)
+            if not backup_pause_event.is_set():
+                if speed_callback: speed_callback("⏸️ Pausado")
+                continue
+            try:
+                if os.path.exists(full_dest_path):
+                    current_size = os.path.getsize(full_dest_path)
+                    delta = current_size - last_size
+                    last_size = current_size
+                    
+                    if speed_callback:
+                        if backup_abort_event.is_set():
+                            speed_callback("🛑 Abortando... Aguardando arquivo atual.")
+                        elif delta > 0:
+                            speed_mb = delta / (1024 * 1024)
+                            speed_callback(f"⚡ Gravando: {speed_mb:.1f} MB/s")
+                        else:
+                            speed_callback("⚙️ Processando...")
+            except OSError:
+                pass
+
+    # Inicia o monitor em segundo plano
+    monitor_thread = threading.Thread(target=speed_monitor, daemon=True)
+    monitor_thread.start()
+    # ---------------------------------------------------------
+
     exclude_list = [ext.strip() for ext in exclusions.split(',') if ext.strip()] if exclusions else []
     folder_ignore = [f.strip().lower() for f in folder_exclusions if f.strip()]
     presets = {"Armazenar": 0, "Rápido": 1, "Normal": 3, "Máximo": 9}
@@ -424,7 +454,6 @@ def start_backup_process(origins, target, compression_level="Normal", password=N
         files_to_backup = None
     
     files_processed = 0
-    start_process_time = time.time()
 
     try:
         filters_compression = [{'id': py7zr.FILTER_LZMA2, 'preset': presets.get(compression_level, 3)}]
@@ -466,12 +495,12 @@ def start_backup_process(origins, target, compression_level="Normal", password=N
                         
                         for file in files:
                             backup_pause_event.wait()
-                            if backup_abort_event.is_set(): raise BackupCancelledException("Backup abortado.")
+                            if backup_abort_event.is_set(): raise BackupCancelledException("Backup abortado pelo usuário.")
                             if file.startswith('.'): continue
                             
                             src_file = os.path.join(root, file)
                             if not passes_advanced_filters(src_file, filters): continue
-                            if is_excluded(file, exclude_list): continue # ✅ Filtro Regex Ativo
+                            if is_excluded(file, exclude_list): continue 
                             if os.path.abspath(src_file) == os.path.abspath(full_dest_path): continue
                             if os.path.islink(src_file) or not os.path.isfile(src_file): continue
 
@@ -484,6 +513,7 @@ def start_backup_process(origins, target, compression_level="Normal", password=N
         integrity_ok, integrity_msg = verify_backup_integrity(full_dest_path, pwd)
         if not integrity_ok:
             if os.path.exists(full_dest_path): os.remove(full_dest_path)
+            monitor_running[0] = False # Desliga o monitor em caso de erro
             return f"Erro: {integrity_msg}", False, {}
         
         if retention > 0: cleanup_old_backups(target, retention, ui_log_callback)
@@ -503,15 +533,22 @@ def start_backup_process(origins, target, compression_level="Normal", password=N
         try: notification.notify(title="Backup Fácil Pro", message=f"Backup concluído:\n{archive_name}", timeout=5)
         except Exception as e:
             logger.warning(f"Erro ao enviar notificação: {e}")
+            
+        monitor_running[0] = False # Desliga o monitor no sucesso
+        if speed_callback: speed_callback("") # Limpa a tela
         return f"Sucesso: {archive_name} criado.", True, stats
 
     except BackupCancelledException as e:
+        monitor_running[0] = False
+        if speed_callback: speed_callback("")
         if os.path.exists(full_dest_path):
             try: os.remove(full_dest_path)
             except OSError:
                 logger.warning(f"Erro ao remover ficheiro após cancelamento: {full_dest_path}")
         return str(e), False, {}
     except Exception as e:
+        monitor_running[0] = False
+        if speed_callback: speed_callback("")
         if os.path.exists(full_dest_path):
             try: os.remove(full_dest_path)
             except OSError:
