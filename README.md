@@ -2,108 +2,102 @@
 
 Uma ferramenta de desktop robusta e multiplataforma para automação, gestão e criptografia de backups locais. Desenvolvida em Python com uma interface gráfica moderna e responsiva utilizando **PySide6** (Qt).
 
-![Versão](https://img.shields.io/badge/vers%C3%A3o-0.3.7-blue)
-![Python](https://img.shields.io/badge/Python-3.8%2B-green)
-![PySide6](https://img.shields.io/badge/GUI-PySide6-brightgreen)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-0.3.9-blue)
+![Python](https://img.shields.io/badge/Python-3.11%2B-green)
+![Flatpak](https://img.shields.io/badge/Distribui%C3%A7%C3%A3o-Flatpak-brightgreen)
 ![Licença](https://img.shields.io/badge/Licen%C3%A7a-GPL--3.0-orange)
 
 ## ✨ Principais Funcionalidades
 
-* **Interface Moderna e Responsiva:** UI em Dark Mode, dividida em abas (Dashboard, Backup, Restauração e Comparação), processada em segundo plano via `QThread` (Zero travamentos).
+* **Monitor de Desempenho em Tempo Real (NOVO):** Visualização da taxa de gravação (MB/s) diretamente na interface, permitindo acompanhar o progresso real de arquivos gigantes sem ansiedade.
+* **Suporte Oficial a Flatpak (NOVO):** Distribuição universal e segura via sandbox, garantindo que o app funcione em qualquer distribuição Linux.
+* **GPS de Diretórios Dinâmico:** Motor de lógica que detecta o ambiente de execução (Flatpak vs Nativo) e redireciona automaticamente o salvamento de dados para evitar erros de permissão.
 * **Criptografia Militar:** Suporte nativo a compressão `.7z` com criptografia **AES-256**.
 * **Backups Incrementais:** Motor inteligente usando SQLite e Hashes MD5 para copiar apenas os arquivos modificados ou novos.
 * **Filtros Avançados (Regex):** Capacidade de ignorar arquivos e pastas por extensões ou Expressões Regulares avançadas (ex: `^temp_.*`).
-* **Comparador de Backups:** Aba dedicada para auditar e comparar dois arquivos de backup distintos, listando arquivos exclusivos e modificados.
-* **Segurança de Credenciais:** Integração com o `keyring` do sistema operacional (Cofre do Linux/Windows) para não expor senhas em texto puro nos arquivos de configuração.
-* **Agendamento Inteligente:** Rotinas automatizadas em background com proteção de Thread Safety (Locks).
+* **Segurança de Credenciais:** Integração com o `keyring` do sistema operacional para armazenamento ofuscado de senhas.
 
 ## 🛠️ Tecnologias Utilizadas
 
-* **Python 3** (Linguagem Core)
+* **Python 3.11+** (Linguagem Core)
 * **PySide6** (Framework de Interface Gráfica / Qt)
 * **py7zr** (Motor de compressão e criptografia)
-* **SQLite3** (Banco de dados para controle de arquivos incrementais)
-* **Keyring** (Ofuscação e segurança de senhas)
-* **PyInstaller & Bash** (Pipeline de compilação e geração de pacotes `.deb`)
+* **flatpak-builder** (Pipeline de empacotamento universal)
+* **SQLite3** (Controle de integridade incremental)
+* **Keyring** (Segurança de credenciais)
 
 ## 🗂️ Estrutura do Projeto
 
-O projeto segue um padrão de arquitetura limpa, separando código fonte, recursos visuais, dados de usuário e scripts de automação:
+O projeto segue um padrão de arquitetura separando código, recursos e manifestos de distribuição:
 
 ```text
 BACKUP_FACIL/
 ├── src/                    # Código-fonte Python principal
-│   ├── main.py             # Ponto de entrada e Janela Principal
-│   ├── logic.py            # Regras de negócio, backend e QThreads
-│   └── ui_components.py    # Componentes visuais do PySide6
-├── assets/                 # Imagens, ícones e arquivos visuais
-├── scripts/                # Scripts de compilação e empacotamento
-│   ├── gerar_deb.sh        # Script gerador do instalador Linux Mint/Debian
-│   └── gerar_exe.bat       # Script gerador do executável Windows
-├── data/                   # (Gerado em dev) Configurações e DB local
+│   ├── main.py             # Ponto de entrada
+│   ├── logic.py            # Motor de backup e GPS de diretórios
+│   └── ui_components.py    # Interface e Monitor Cardíaco (MB/s)
+├── assets/                 # Ícone (256x256) e recursos visuais
+├── io.github.vagnarok.BackupFacilPro.yml  # Manifesto Flatpak
 ├── requirements.txt        # Dependências do projeto
 └── README.md               # Documentação
 ```
 
 ## 🚀 Como Executar em Modo de Desenvolvimento
 
-1. Clone o repositório e acesse a pasta do projeto:
+1. Clone o repositório:
    ```bash
-   git clone https://github.com/VaGNaroK/backup-facil.git
+   git clone [https://github.com/VaGNaroK/backup-facil.git](https://github.com/VaGNaroK/backup-facil.git)
    cd backup-facil
    ```
 
-2. Crie e ative um ambiente virtual:
+2. Configure o ambiente e instale as dependências:
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # No Linux/Mac
-   # ou venv\Scripts\activate # No Windows
-   ```
-
-3. Instale as dependências:
-   ```bash
+   source venv/bin/activate
    pip install -r requirements.txt
    ```
 
-4. Execute a aplicação:
+3. Execute:
    ```bash
    python3 src/main.py
    ```
 
-## 📦 Como Compilar e Instalar (Linux Mint / Debian)
+## 📦 Como Compilar e Instalar (Linux - Flatpak)
 
-Siga rigorosamente a ordem abaixo para gerar o instalador corretamente:
+Este é o método recomendado para garantir compatibilidade universal:
 
-1. **Compilar o Binário:** Gere o executável a partir do código fonte.
+1. **Construir e Instalar Localmente:**
+   ```bash
+   flatpak-builder build-dir io.github.vagnarok.BackupFacilPro.yml --force-clean --user --install
+   ```
+
+2. **Gerar o arquivo instalador (.flatpak):**
+   ```bash
+   flatpak build-bundle ~/.local/share/flatpak/repo Backup_Facil_Pro_v0.3.9.flatpak io.github.vagnarok.BackupFacilPro
+   ```
+
+## 📦 Como Compilar e Instalar (Linux - .deb)
+
+Para distribuições baseadas em Debian/Mint:
+
+1. **Gerar Binário via PyInstaller:**
    ```bash
    python3 -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets/icon.png" --add-data "assets:assets" --hidden-import logic --hidden-import ui_components src/main.py
    ```
 
-2. **Preparar o Script:** Conceda permissão de execução ao script de empacotamento.
+2. **Gerar e Instalar o Pacote:**
    ```bash
    chmod +x scripts/gerar_deb.sh
-   ```
-
-3. **Gerar o Pacote .deb:** Execute o script para criar o instalador Debian.
-   ```bash
    ./scripts/gerar_deb.sh
-   ```
-
-4. **Instalar:** Utilize o gerenciador de pacotes para instalar o sistema.
-   ```bash
-   sudo dpkg -i backup-facil-pro_0.3.4_amd64.deb
+   sudo dpkg -i backup-facil-pro_0.3.9_amd64.deb
    ```
 
 ## 🪟 Como Compilar (Windows)
 
-Para gerar o arquivo executável `.exe` no Windows, abra o Terminal (CMD ou PowerShell) na raiz do projeto, ative o ambiente virtual e execute:
-
-1. **Comando de Compilação:**
+1. No terminal do Windows, com o ambiente virtual ativo, execute:
    ```cmd
    python -m PyInstaller --noconsole --onefile --name "Backup_Facil_Pro" --icon="assets\icon.ico" --add-data "assets;assets" --hidden-import logic --hidden-import ui_components src\main.py
    ```
-
-2. O executável pronto estará disponível na pasta `dist\`.
 
 ---
 *Desenvolvido por VaGNaroK com um help de IA.*
